@@ -1,0 +1,13 @@
+{
+  "name": "bytebun-web",
+  "private": true,
+  "description": "Byte Bun Tech website: helper scripts that wrap Docker Compose. No host Node is needed to run the app itself.",
+  "scripts": {
+    "up": "docker compose up --build",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f",
+    "reset-db": "docker compose down && docker volume rm bytebun_mssql-dev-data && echo Deleted the local database volume. All local leads are gone.",
+    "prod:build": "docker compose -f docker-compose.prod.yml build",
+    "prod:up": "docker compose -f docker-compose.prod.yml up -d --build"
+  }
+}

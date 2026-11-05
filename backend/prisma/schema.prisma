@@ -1,0 +1,31 @@
+// Database schema. After changing it, create a migration with:
+//   docker compose exec api npm run db:migrate:new -- --name describe_change
+// Review the new prisma/migrations/<timestamp>_describe_change/migration.sql; the API restarts
+// and applies it automatically (also on every start, in dev and production).
+
+// prisma-client-js generates plain JavaScript into node_modules (this project is JS-only).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+model Lead {
+  id           Int      @id @default(autoincrement()) @map("Id")
+  name         String   @map("Name") @db.NVarChar(120)
+  email        String   @map("Email") @db.NVarChar(254)
+  phone        String?  @map("Phone") @db.NVarChar(40)
+  businessName String   @map("BusinessName") @db.NVarChar(160)
+  businessType String   @map("BusinessType") @db.NVarChar(80)
+  message      String?  @map("Message") @db.NVarChar(2000)
+  source       String   @default("website") @map("Source") @db.NVarChar(50)
+  // Stored in UTC; the database fills it with SYSUTCDATETIME().
+  createdAt    DateTime @default(dbgenerated("sysutcdatetime()")) @map("CreatedAt") @db.DateTime2
+  status       String   @default("new") @map("Status") @db.NVarChar(30)
+
+  @@index([createdAt], map: "IX_Leads_CreatedAt")
+  @@index([email], map: "IX_Leads_Email")
+  @@map("Leads")
+}

@@ -1,0 +1,106 @@
+@import "tailwindcss";
+/* Self-hosted font (no third-party requests). Fontsource uses font-display: swap. */
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+
+/* One main breakpoint at 720px: `mobile:` is 720px and below, `desktop:` is above. */
+@custom-variant mobile (@media (max-width: 720px));
+@custom-variant desktop (@media (min-width: 721px));
+
+/* Brand tokens. Tailwind's default palette is removed so only these colors exist
+   (bg-cream-dough, text-byte-purple, border-line, ...). Never hard-code hex in components:
+   a midnight-plum dark mode is planned and will be done by overriding these tokens. */
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-*: initial;
+  --color-byte-purple: #331165;
+  --color-byte-purple-hover: #4A1F8A;
+  --color-bun-orange: #FFA612;
+  --color-bun-orange-hover: #FFB63D;
+  --color-honey-gold: #EDB330;
+  --color-gold-tint: #FBEFC8;
+  --color-midnight-plum: #1A0A33;
+  --color-soft-violet: #6B4FBF;
+  --color-lavender-mist: #EDE7F8;
+  --color-cream-dough: #FFF8EC;
+  --color-circuit-teal: #14B8A6;
+  --color-line: #D9CFEE;
+  --color-muted: #4A3B63;
+  /* Logo wordmark "TECH" only (inside the SVG). */
+  --color-gold-dark: #B8860B;
+  /* Not a brand color: form error text only (6:1 on cream-dough). */
+  --color-danger: #B42318;
+
+  --radius-btn: 10px;
+  --radius-card: 16px;
+  --radius-chat: 18px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Keep the scrollbar's space when the lead form locks scrolling, so the page doesn't shift. */
+    scrollbar-gutter: stable;
+  }
+  /* Native smooth anchors only as a fallback; Lenis (SmoothScroll.jsx) adds .lenis when running. */
+  html:not(.lenis) {
+    scroll-behavior: smooth;
+  }
+  body {
+    background: var(--color-cream-dough);
+    color: var(--color-midnight-plum);
+    font-family: var(--font-sans);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    color: var(--color-byte-purple);
+    font-weight: 700;
+  }
+  h1 {
+    font-size: clamp(32px, 5vw, 52px);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin-bottom: 18px;
+  }
+  h2 {
+    font-size: clamp(26px, 3.6vw, 36px);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    margin-bottom: 12px;
+  }
+  h3 {
+    font-size: 17px;
+    margin-bottom: 6px;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-midnight-plum);
+    outline-offset: 3px;
+  }
+  /* On purple and plum bands a dark ring is invisible, so use cream there. */
+  [data-surface="dark"] :focus-visible {
+    outline-color: var(--color-cream-dough);
+  }
+  /* Anchored sections shouldn't hide under the 68px sticky header. */
+  [id] {
+    scroll-margin-top: 72px;
+  }
+  /* The header is 56px at 720px and below. */
+  @media (max-width: 720px) {
+    [id] {
+      scroll-margin-top: 60px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

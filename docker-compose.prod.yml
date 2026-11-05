@@ -1,0 +1,63 @@
+# Production (VPS): one app container (site + API) and SQL Server.
+# Run:  docker compose -f docker-compose.prod.yml up -d --build
+#
+# Every secret is required here; Compose stops with an error if one is missing from .env.
+# The database port is NOT published. Only the app is reachable, and only on 127.0.0.1,
+# so your reverse proxy (Nginx, Caddy, Traefik) is the only way in from the internet.
+
+name: bytebun-prod
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SITE_URL: ${SITE_URL:?Set SITE_URL in .env}
+    image: bytebun-web:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN in .env}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      DB_HOST: db
+      DB_PORT: 1433
+      DB_NAME: ${DB_NAME:-bytebun}
+      DB_USER: ${DB_USER:-sa}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_TRUST_SERVER_CERT: ${DB_TRUST_SERVER_CERT:-true}
+      LEADS_RATE_LIMIT_MAX: ${LEADS_RATE_LIMIT_MAX:-5}
+      LEADS_RATE_LIMIT_WINDOW_MINUTES: ${LEADS_RATE_LIMIT_WINDOW_MINUTES:-15}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-4000}:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [bytebun]
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      # Developer is free but not licensed for production. Express (free, 10 GB limit) is a common choice.
+      MSSQL_PID: ${MSSQL_PID:-Express}
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env}
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "SQLCMDPASSWORD=\"$$MSSQL_SA_PASSWORD\" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q \"SELECT 1\" > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    networks: [bytebun]
+
+volumes:
+  mssql-data:
+
+networks:
+  bytebun:

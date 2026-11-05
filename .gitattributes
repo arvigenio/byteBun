@@ -1,0 +1,18 @@
+# Normalize text files to LF so scripts and Dockerfiles work inside Linux containers.
+* text=auto eol=lf
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+*.yml text eol=lf
+*.sql text eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary

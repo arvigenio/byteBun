@@ -1,0 +1,18 @@
+FROM node:22-alpine
+# OpenSSL is required by Prisma's migration engine on Alpine.
+RUN apk add --no-cache openssl
+WORKDIR /app
+
+# Schema and Prisma config first, because `npm ci` runs `prisma generate` (postinstall).
+COPY package.json package-lock.json prisma.config.js ./
+COPY prisma ./prisma
+COPY src/db/url.js ./src/db/url.js
+RUN npm ci --no-audit --no-fund && cp package-lock.json node_modules/.lock-stamp
+
+COPY . .
+EXPOSE 4000
+
+# node_modules lives in a container volume that survives rebuilds. If package-lock.json changed
+# since that volume was filled, reinstall first so new dependencies appear without manual steps.
+# `npm run dev` regenerates the Prisma client on every restart, so schema edits apply live.
+CMD ["sh", "-c", "cmp -s package-lock.json node_modules/.lock-stamp || (echo 'Dependencies changed, installing...' && npm install --no-audit --no-fund && cp package-lock.json node_modules/.lock-stamp); exec npm run dev"]

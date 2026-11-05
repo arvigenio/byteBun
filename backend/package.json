@@ -1,0 +1,31 @@
+{
+  "name": "bytebun-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "postinstall": "prisma generate",
+    "start": "node src/server.js",
+    "dev": "nodemon --legacy-watch --watch src --watch prisma --ext js,json,prisma,sql --exec \"prisma generate && node src/server.js\"",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:new": "prisma migrate dev --create-only"
+  },
+  "dependencies": {
+    "@prisma/adapter-mssql": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.3",
+    "helmet": "^8.3.0",
+    "pino": "^10.4.0",
+    "prisma": "7.10.1",
+    "yup": "^1.7.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
