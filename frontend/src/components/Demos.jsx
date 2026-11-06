@@ -7,7 +7,7 @@ export function Demos() {
   const d = site.demos;
   return (
     <Section id="demos" tone="lavender">
-      <SectionHeader title={d.title} subtitle={d.subtitle} />
+      <SectionHeader eyebrow={d.eyebrow} title={d.title} subtitle={d.subtitle} />
       <CardGrid>
         {d.items.map((item) => (
           <Card key={item.name}>

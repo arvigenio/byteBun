@@ -7,7 +7,7 @@ export function Problem() {
   const p = site.problem;
   return (
     <Section tone="cream">
-      <SectionHeader title={p.title} subtitle={p.subtitle} />
+      <SectionHeader eyebrow={p.eyebrow} title={p.title} subtitle={p.subtitle} />
       <CardGrid>
         {p.cards.map((c) => (
           <Card key={c.title} border="border border-l-4 border-line border-l-circuit-teal">

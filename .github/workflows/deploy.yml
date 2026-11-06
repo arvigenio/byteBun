@@ -1,0 +1,99 @@
+# Continuous deployment: every push to main is built here, then deployed to the VPS.
+# Setup (secrets, deploy key, server side): docs/DEPLOY-CD.md
+#
+#   build   builds the production Docker image on GitHub's runner. A commit that doesn't
+#           build never reaches the server.
+#   deploy  SSHes to the VPS. The key is locked to scripts/deploy.sh there, which pulls,
+#           rebuilds, waits for the health check, and rolls back if the new version is unhealthy.
+#
+# Re-run a deploy by hand: Actions tab -> Deploy -> Run workflow.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.vscode/**'
+  workflow_dispatch:
+
+# One deploy at a time; a newer push waits for the running one instead of cancelling it
+# halfway through a rebuild.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build (same Dockerfile the VPS uses)
+        run: docker build --build-arg SITE_URL=https://ci.example.invalid -t bytebun-web:ci .
+
+  deploy:
+    name: Deploy to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # No `environment:` here on purpose: a private repo on GitHub Free can't configure
+    # environments. Repository secrets (below) work on every plan.
+    steps:
+      - name: Check configuration
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          missing=()
+          for name in VPS_HOST VPS_USER VPS_SSH_KEY VPS_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing secrets: ${missing[*]}. See docs/DEPLOY-CD.md."
+            exit 1
+          fi
+
+      - name: Set up SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key: the connection fails instead of trusting an unknown server.
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+        # The server ignores the command sent here and runs scripts/deploy.sh (forced command).
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "$VPS_USER@$VPS_HOST" deploy
+
+      - name: Check the public site
+        if: vars.SITE_URL != ''
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "${SITE_URL%/}/api/health"
+          echo
+          curl -fsS -o /dev/null -w "Home page: HTTP %{http_code}\n" "${SITE_URL%/}/"
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

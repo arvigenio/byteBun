@@ -11,9 +11,9 @@ export function Card({ className = '', border, children, as: Tag = 'div' }) {
 
 export const CardText = ({ children }) => <p className="text-[15px] text-muted">{children}</p>;
 
-// Grid of cards: repeat(auto-fit, minmax(250px, 1fr)), 20px gap.
+// Grid of cards: repeat(auto-fit, minmax(250px, 1fr)), 20px gap. Cards reveal one after another.
 export function CardGrid({ className = '', children }) {
-  return <div className={`grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-5 mobile:gap-4 ${className}`}>{children}</div>;
+  return <div data-reveal="stagger" className={`grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-5 mobile:gap-4 ${className}`}>{children}</div>;
 }
 
 // Small rounded label: "Demo", "Most popular".

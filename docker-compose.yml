@@ -1,4 +1,4 @@
-# Local development: web (Vite) + api (Express) + db (SQL Server).
+# Local development: web (Vite) + api (NestJS) + db (SQL Server).
 # Start everything:  docker compose up --build   then open http://localhost:5173
 #
 # Values come from .env when it exists (Compose reads it automatically).

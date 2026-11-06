@@ -8,7 +8,7 @@ export function Services() {
   const s = site.services;
   return (
     <Section id="services" tone="lavender">
-      <SectionHeader title={s.title} subtitle={s.subtitle} />
+      <SectionHeader eyebrow={s.eyebrow} title={s.title} subtitle={s.subtitle} />
       <CardGrid>
         {s.cards.map((c) => (
           <Card key={c.title}>

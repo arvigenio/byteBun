@@ -1,47 +1,32 @@
-import { LeadFormDialog } from './components/LeadForm.jsx';
+import { useLayoutEffect, useRef } from 'react';
+import { useLenis } from 'lenis/react';
 import { SmoothScroll } from './components/SmoothScroll.jsx';
-import { TopStrip } from './components/TopStrip.jsx';
-import { Header } from './components/Header.jsx';
-import { Hero } from './components/Hero.jsx';
-import { FreeBand } from './components/FreeBand.jsx';
-import { Problem } from './components/Problem.jsx';
-import { Services } from './components/Services.jsx';
-import { Metrics } from './components/Metrics.jsx';
-import { Packages } from './components/Packages.jsx';
-import { Demos } from './components/Demos.jsx';
-import { WhyUs } from './components/WhyUs.jsx';
-import { HowItWorks } from './components/HowItWorks.jsx';
-import { Faq } from './components/Faq.jsx';
-import { FinalCta } from './components/FinalCta.jsx';
-import { SeoBlock } from './components/SeoBlock.jsx';
-import { Footer } from './components/Footer.jsx';
-import { StickyBar } from './components/StickyBar.jsx';
+import { HomePage } from './pages/HomePage.jsx';
+import { GetStartedPage } from './pages/GetStartedPage.jsx';
+import { routes, usePathname } from './lib/router.js';
 
-// Page order matches docs/reference/bytebun-landing-v9.html.
+// Two pages: the landing page and the lead page. Any unknown path shows the landing page.
 // <head> tags (title, meta, JSON-LD) are injected at build time by seo-plugin.js, so they are in
 // the static HTML for crawlers and link previews that don't run JavaScript.
 export default function App() {
+  const pathname = usePathname().replace(/\/+$/, '') || routes.home;
   return (
     <SmoothScroll>
-      <TopStrip />
-      <Header />
-      <main id="top">
-        <Hero />
-        <FreeBand />
-        <Problem />
-        <Services />
-        <Metrics />
-        <Packages />
-        <Demos />
-        <WhyUs />
-        <HowItWorks />
-        <Faq />
-        <FinalCta />
-        <SeoBlock />
-      </main>
-      <Footer />
-      <StickyBar />
-      <LeadFormDialog />
+      <ScrollResetOnNavigate pathname={pathname} />
+      {pathname === routes.getStarted ? <GetStartedPage /> : <HomePage />}
     </SmoothScroll>
   );
+}
+
+// A new page starts at the top. Skips the first render so /#faq links still land on #faq.
+function ScrollResetOnNavigate({ pathname }) {
+  const lenis = useLenis();
+  const previous = useRef(pathname);
+  useLayoutEffect(() => {
+    if (previous.current === pathname) return;
+    previous.current = pathname;
+    if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
+    else window.scrollTo(0, 0);
+  }, [pathname, lenis]);
+  return null;
 }

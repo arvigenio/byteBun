@@ -4,9 +4,9 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 
 # Schema and Prisma config first, because `npm ci` runs `prisma generate` (postinstall).
-COPY package.json package-lock.json prisma.config.js ./
+COPY package.json package-lock.json prisma.config.ts ./
 COPY prisma ./prisma
-COPY src/db/url.js ./src/db/url.js
+COPY src/database/database-url.ts ./src/database/database-url.ts
 RUN npm ci --no-audit --no-fund && cp package-lock.json node_modules/.lock-stamp
 
 COPY . .
@@ -14,5 +14,6 @@ EXPOSE 4000
 
 # node_modules lives in a container volume that survives rebuilds. If package-lock.json changed
 # since that volume was filled, reinstall first so new dependencies appear without manual steps.
-# `npm run dev` regenerates the Prisma client on every restart, so schema edits apply live.
+# `npm run dev` (nodemon.json) regenerates the Prisma client and rebuilds the TypeScript on every
+# change, so code and schema edits apply live.
 CMD ["sh", "-c", "cmp -s package-lock.json node_modules/.lock-stamp || (echo 'Dependencies changed, installing...' && npm install --no-audit --no-fund && cp package-lock.json node_modules/.lock-stamp); exec npm run dev"]

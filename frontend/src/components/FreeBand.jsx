@@ -6,7 +6,7 @@ export function FreeBand() {
   const f = site.freeBand;
   return (
     <section id="free" data-surface="dark" className="bg-byte-purple py-14 mobile:py-11">
-      <Container className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] items-center gap-8">
+      <Container data-reveal="stagger" className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] items-center gap-8">
         <div>
           <h2 className="mb-2.5 text-cream-dough">{f.title}</h2>
           <p className="max-w-[48ch] text-[17px] text-lavender-mist">{f.text}</p>

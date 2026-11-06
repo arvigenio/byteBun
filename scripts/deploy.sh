@@ -39,7 +39,7 @@ main() {
     return 1
   fi
 
-  [[ -f .env ]] || { echo "Missing $app_dir/.env (see docs/DEPLOY-VPS.md, step 2)." >&2; return 1; }
+  [[ -f .env ]] || { echo "Missing $app_dir/.env (see docs/DEPLOY-VPS.md, step 4)." >&2; return 1; }
 
   log "Updating code from origin/$branch"
   local previous_commit new_commit

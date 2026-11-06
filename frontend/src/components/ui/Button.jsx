@@ -1,4 +1,4 @@
-import { useLeadForm } from '../../hooks/useLeadForm.js';
+import { leadHref, onRouteLinkClick } from '../../lib/router.js';
 
 const BASE =
   'inline-flex min-h-11 cursor-pointer items-center justify-center rounded-btn border-2 text-center font-semibold transition-[background-color,transform] duration-150 motion-safe:hover:-translate-y-px';
@@ -16,17 +16,16 @@ const VARIANTS = {
 };
 
 // One button for the whole site.
-//  - `lead="source"` renders a <button> that opens the lead form (source is saved with the lead).
+//  - `lead="source"` links to the lead page (/get-started?from=source; the source is saved with the lead).
 //  - `href` renders a link (in-page anchor, mailto:, or external URL).
 export function Button({ variant = 'primary', size = 'md', lead, href, className = '', children, ...rest }) {
-  const { open } = useLeadForm();
   const classes = `${BASE} ${SIZES[size]} ${VARIANTS[variant]} ${className}`;
 
   if (lead) {
     return (
-      <button type="button" className={classes} onClick={() => open(lead)} {...rest}>
+      <a href={leadHref(lead)} className={classes} onClick={onRouteLinkClick} {...rest}>
         {children}
-      </button>
+      </a>
     );
   }
   const external = /^https?:\/\//.test(href);
@@ -49,7 +48,7 @@ export function CtaButton({ cta, variant, size, className }) {
 // Centered row under a section: optional text plus button(s).
 export function CtaStrip({ text, children }) {
   return (
-    <div className="mt-11 flex flex-wrap items-center justify-center gap-3.5 text-center font-semibold mobile:mt-8 mobile:flex-col mobile:gap-3 mobile:*:w-full">
+    <div data-reveal className="mt-11 flex flex-wrap items-center justify-center gap-3.5 text-center font-semibold mobile:mt-8 mobile:flex-col mobile:gap-3 mobile:*:w-full">
       {text && <span>{text}</span>}
       {children}
     </div>

@@ -37,6 +37,82 @@
   --radius-btn: 10px;
   --radius-card: 16px;
   --radius-chat: 18px;
+
+  /* Lead page (/get-started) motion. Always used through `motion-safe:` so people who prefer
+     reduced motion get the same page without movement. */
+  --animate-step-next: step-next 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-step-prev: step-prev 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-rise: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pop: pop 0.6s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  --animate-shake: shake 0.4s ease-in-out;
+  --animate-drift: drift 14s ease-in-out infinite alternate;
+  --animate-draw: draw 0.5s 0.35s ease-out both;
+  --animate-countdown: countdown linear both; /* duration set inline */
+  /* Bonus step */
+  --animate-sheen: sheen 4.5s ease-in-out infinite;
+  --animate-wiggle: wiggle 2.8s ease-in-out 0.6s infinite;
+  --animate-blink: blink 1s steps(1) infinite;
+  --animate-strike: strike 0.35s ease-out both;
+  --animate-stamp: stamp 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  --animate-twinkle: twinkle 2.4s ease-in-out infinite;
+
+  @keyframes step-next {
+    from { opacity: 0; transform: translateX(36px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes step-prev {
+    from { opacity: 0; transform: translateX(-36px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(0.6); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes shake {
+    20%, 60% { transform: translateX(-7px); }
+    40%, 80% { transform: translateX(7px); }
+  }
+  @keyframes drift {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(40px, -30px) scale(1.15); }
+  }
+  @keyframes draw {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes sheen {
+    from { background-position: 100% 0; }
+    to { background-position: -100% 0; }
+  }
+  @keyframes wiggle {
+    0%, 70%, 100% { transform: rotate(0); }
+    76% { transform: rotate(-12deg) scale(1.08); }
+    84% { transform: rotate(10deg) scale(1.08); }
+    92% { transform: rotate(-6deg); }
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+  @keyframes strike {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  @keyframes stamp {
+    from { opacity: 0; transform: scale(2.6); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.15; transform: scale(0.7); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+  @keyframes countdown {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: 1; }
+  }
 }
 
 @layer base {
@@ -96,6 +172,30 @@
       scroll-margin-top: 60px;
     }
   }
+}
+
+/* Scroll reveal (hooks/useScrollReveal.js). Only when motion is welcome and the hook is running. */
+@media (prefers-reduced-motion: no-preference) {
+  .js-reveal [data-reveal]:not([data-reveal="stagger"]),
+  .js-reveal [data-reveal="stagger"] > * {
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+      opacity 0.7s cubic-bezier(0.2, 0.8, 0.2, 1),
+      transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  .js-reveal [data-reveal].is-revealed:not([data-reveal="stagger"]),
+  .js-reveal [data-reveal="stagger"].is-revealed > * {
+    opacity: 1;
+    transform: none;
+  }
+  /* One after another: 90ms apart, capped so long lists don't drag. */
+  .js-reveal [data-reveal="stagger"] > :nth-child(2) { --reveal-delay: 90ms; }
+  .js-reveal [data-reveal="stagger"] > :nth-child(3) { --reveal-delay: 180ms; }
+  .js-reveal [data-reveal="stagger"] > :nth-child(4) { --reveal-delay: 270ms; }
+  .js-reveal [data-reveal="stagger"] > :nth-child(5) { --reveal-delay: 360ms; }
+  .js-reveal [data-reveal="stagger"] > :nth-child(n + 6) { --reveal-delay: 450ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {

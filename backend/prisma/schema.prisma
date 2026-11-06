@@ -1,9 +1,10 @@
 // Database schema. After changing it, create a migration with:
 //   docker compose exec api npm run db:migrate:new -- --name describe_change
-// Review the new prisma/migrations/<timestamp>_describe_change/migration.sql; the API restarts
-// and applies it automatically (also on every start, in dev and production).
+// Review the new prisma/migrations/<timestamp>_describe_change/migration.sql. In development the
+// API restarts and applies it right away, so don't rename the folder afterwards. Migrations are
+// also applied on every start, in dev and production.
 
-// prisma-client-js generates plain JavaScript into node_modules (this project is JS-only).
+// prisma-client-js generates the client (with TypeScript types) into node_modules/@prisma/client.
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,18 +15,41 @@ datasource db {
 
 model Lead {
   id           Int      @id @default(autoincrement()) @map("Id")
-  name         String   @map("Name") @db.NVarChar(120)
+  firstName    String   @map("FirstName") @db.NVarChar(50)
+  lastName     String   @map("LastName") @db.NVarChar(50)
   email        String   @map("Email") @db.NVarChar(254)
   phone        String?  @map("Phone") @db.NVarChar(40)
-  businessName String   @map("BusinessName") @db.NVarChar(160)
+  businessName String?  @map("BusinessName") @db.NVarChar(160)
   businessType String   @map("BusinessType") @db.NVarChar(80)
+  // JSON arrays of option keys, e.g. ["more-bookings","other"] (src/leads/lead-options.ts).
+  goals        String?  @map("Goals") @db.NVarChar(1000)
+  // The visitor's own words when "other" is one of the goals.
+  goalsOther   String?  @map("GoalsOther") @db.NVarChar(200)
+  features     String?  @map("Features") @db.NVarChar(1000)
   message      String?  @map("Message") @db.NVarChar(2000)
   source       String   @default("website") @map("Source") @db.NVarChar(50)
   // Stored in UTC; the database fills it with SYSUTCDATETIME().
   createdAt    DateTime @default(dbgenerated("sysutcdatetime()")) @map("CreatedAt") @db.DateTime2
   status       String   @default("new") @map("Status") @db.NVarChar(30)
+  booking      Booking?
 
   @@index([createdAt], map: "IX_Leads_CreatedAt")
   @@index([email], map: "IX_Leads_Email")
   @@map("Leads")
+}
+
+// The free call a lead booked on the lead page. One per lead; StartsAt is unique, so a slot
+// can't be booked twice (the API answers 409 if two people race for it).
+// To free a slot (e.g. a cancelled call), delete its row here.
+model Booking {
+  id        Int      @id @default(autoincrement()) @map("Id")
+  leadId    Int      @unique @map("LeadId")
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Call start in UTC. Availability rules: src/booking/availability.js.
+  startsAt  DateTime @unique @map("StartsAt") @db.DateTime2
+  // The visitor's time zone when they booked (IANA name, e.g. "America/New_York").
+  timeZone  String?  @map("TimeZone") @db.NVarChar(64)
+  createdAt DateTime @default(dbgenerated("sysutcdatetime()")) @map("CreatedAt") @db.DateTime2
+
+  @@map("Bookings")
 }

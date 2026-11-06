@@ -5,9 +5,9 @@ import { CtaButton } from './ui/Button.jsx';
 export function HowItWorks() {
   const s = site.steps;
   return (
-    <Section id="how" tone="lavender" containerClassName="text-center">
-      <SectionHeader title={s.title} subtitle={s.subtitle} center />
-      <ol className="mx-auto max-w-[660px] text-left">
+    <Section id="how" tone="cream" containerClassName="text-center">
+      <SectionHeader eyebrow={s.eyebrow} title={s.title} subtitle={s.subtitle} center />
+      <ol data-reveal="stagger" className="mx-auto max-w-[660px] text-left">
         {s.items.map((step, i) => (
           <li key={step.title} className="mb-[26px] flex gap-[18px]">
             <span aria-hidden="true" className="grid size-[38px] flex-none place-items-center rounded-full bg-byte-purple text-[15px] font-bold text-cream-dough">

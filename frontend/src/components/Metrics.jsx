@@ -10,7 +10,7 @@ export function Metrics() {
   const [primary, secondary] = m.ctas;
   return (
     <Section tone="cream" containerClassName="text-center">
-      <SectionHeader title={m.title} subtitle={m.subtitle} center />
+      <SectionHeader eyebrow={m.eyebrow} title={m.title} subtitle={m.subtitle} center />
       <CardGrid className="mobile:gap-3!">
         {m.items.map((item) => (
           <Card key={item.figure} className="mobile:px-5! mobile:py-4! mobile:text-left">

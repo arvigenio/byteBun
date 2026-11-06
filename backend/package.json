@@ -2,30 +2,39 @@
   "name": "bytebun-api",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "main": "src/server.js",
+  "description": "Byte Bun Tech API: NestJS + TypeScript, Prisma ORM on SQL Server.",
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.22"
   },
   "scripts": {
     "postinstall": "prisma generate",
-    "start": "node src/server.js",
-    "dev": "nodemon --legacy-watch --watch src --watch prisma --ext js,json,prisma,sql --exec \"prisma generate && node src/server.js\"",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "dev": "nodemon",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:new": "prisma migrate dev --create-only"
   },
   "dependencies": {
+    "@nestjs/common": "^12.4.0",
+    "@nestjs/core": "^12.4.0",
+    "@nestjs/platform-express": "^12.4.0",
+    "@nestjs/throttler": "^6.7.1",
     "@prisma/adapter-mssql": "7.10.1",
     "@prisma/client": "7.10.1",
-    "cors": "^2.8.6",
     "express": "^5.3.0",
-    "express-rate-limit": "^8.7.3",
     "helmet": "^8.3.0",
     "pino": "^10.4.0",
     "prisma": "7.10.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
     "yup": "^1.7.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "@nestjs/cli": "^12.0.12",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.0",
+    "nodemon": "^3.1.14",
+    "typescript": "~6.0.2"
   }
 }
