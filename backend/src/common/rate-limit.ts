@@ -1,9 +1,12 @@
 import { type ExecutionContext, Injectable, SetMetadata } from '@nestjs/common';
-import { ThrottlerGuard, type ThrottlerModuleOptions } from '@nestjs/throttler';
+import { normalizeIp, ThrottlerGuard, type ThrottlerModuleOptions } from '@nestjs/throttler';
+import type { Request } from 'express';
 import type { AppConfig } from '../config/config';
 import { ApiError } from './api-error';
+import { clientIp } from './client-ip';
 
-// Two limits, per client IP (in memory, so they reset when the API restarts):
+// Two limits, per client IP (in memory, so they reset when the API restarts). The IP is the
+// visitor's real one, also behind Cloudflare (client-ip.ts); IPv6 is counted per /64 network.
 //  - "api":    generous, every route (opt out with @SkipThrottle())
 //  - "strict": only routes marked @StrictRateLimit() (the lead form), to slow down spam
 const STRICT = 'bytebun:strict-rate-limit';
@@ -17,9 +20,13 @@ export const rateLimitOptions = (cfg: AppConfig): ThrottlerModuleOptions => ({
   ],
 });
 
-// Same limits as the stock guard, with our error body.
+// The stock guard, keyed by the real client IP, with our error body.
 @Injectable()
 export class ApiThrottlerGuard extends ThrottlerGuard {
+  protected override async getTracker(req: Record<string, any>): Promise<string> {
+    return normalizeIp(clientIp(req as Request), this.ipv6SubnetPrefix);
+  }
+
   protected override async throwThrottlingException(context: ExecutionContext): Promise<void> {
     throw new ApiError(429, {
       error: 'rate_limited',

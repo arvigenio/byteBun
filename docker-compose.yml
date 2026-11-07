@@ -1,4 +1,4 @@
-# Local development: web (Vite) + api (NestJS) + db (SQL Server).
+# Local development: web (Vite) + api (NestJS) + db (PostgreSQL).
 # Start everything:  docker compose up --build   then open http://localhost:5173
 #
 # Values come from .env when it exists (Compose reads it automatically).
@@ -9,26 +9,27 @@ name: bytebun
 
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: postgres:17-alpine
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-ByteBun_Dev_Pass1!}
+      # The image creates this user and database on first start (when the volume is empty).
+      POSTGRES_USER: ${DB_USER:-bytebun}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ByteBun_Dev_Pass1}
+      POSTGRES_DB: ${DB_NAME:-bytebun}
     ports:
-      # Localhost only, so SSMS or Azure Data Studio on this PC can connect.
-      - "127.0.0.1:1433:1433"
+      # Localhost only, so psql, pgAdmin, DBeaver, or a VS Code PostgreSQL extension can connect.
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
     volumes:
-      # A Docker volume, not a Windows folder: SQL Server crashes when its files sit on a
+      # A Docker volume, not a Windows folder: PostgreSQL refuses to run when its files sit on a
       # Windows mount (it needs Linux file permissions). The volume lives in Docker's own
       # disk, which is on D: (D:\Docker\wsl\Ubuntu\ext4.vhdx). Delete with: npm run reset-db
-      - mssql-dev-data:/var/opt/mssql
+      - pg-dev-data:/var/lib/postgresql/data
     healthcheck:
-      # SQLCMDPASSWORD avoids shell-quoting problems with symbols in the password.
-      test: ["CMD-SHELL", "SQLCMDPASSWORD=\"$$MSSQL_SA_PASSWORD\" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q \"SELECT 1\" > /dev/null || exit 1"]
-      interval: 10s
+      # -h 127.0.0.1: a TCP check, so it doesn't pass during the image's socket-only init phase.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
       timeout: 5s
       retries: 15
-      start_period: 40s
+      start_period: 10s
     networks: [bytebun]
 
   api:
@@ -40,11 +41,11 @@ services:
       API_PORT: ${API_PORT:-4000}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
       DB_HOST: db
-      DB_PORT: 1433
+      DB_PORT: 5432
       DB_NAME: ${DB_NAME:-bytebun}
-      DB_USER: ${DB_USER:-sa}
-      DB_PASSWORD: ${DB_PASSWORD:-ByteBun_Dev_Pass1!}
-      DB_TRUST_SERVER_CERT: ${DB_TRUST_SERVER_CERT:-true}
+      DB_USER: ${DB_USER:-bytebun}
+      DB_PASSWORD: ${DB_PASSWORD:-ByteBun_Dev_Pass1}
+      DB_SSL: ${DB_SSL:-false}
       LEADS_RATE_LIMIT_MAX: ${LEADS_RATE_LIMIT_MAX:-5}
       LEADS_RATE_LIMIT_WINDOW_MINUTES: ${LEADS_RATE_LIMIT_WINDOW_MINUTES:-15}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -85,7 +86,7 @@ services:
     networks: [bytebun]
 
 volumes:
-  mssql-dev-data:
+  pg-dev-data:
 
 networks:
   bytebun:

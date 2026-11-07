@@ -1,4 +1,4 @@
-// Startup sequence, run before Nest starts: wait for SQL Server, create the app database if
+// Startup sequence, run before Nest starts: wait for PostgreSQL, create the app database if
 // missing, then apply pending Prisma migrations (prisma/migrations). Safe to run on every start.
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -11,36 +11,37 @@ type Client = ReturnType<typeof createPrismaClient>;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-async function waitForSqlServer({ attempts = 20, baseDelayMs = 1_000, maxDelayMs = 10_000 } = {}): Promise<Client> {
+async function waitForPostgres({ attempts = 20, baseDelayMs = 1_000, maxDelayMs = 10_000 } = {}): Promise<Client> {
   for (let attempt = 1; ; attempt++) {
     // A fresh client per attempt, so a failed connection pool is never reused.
-    const master = createPrismaClient(config.db, 'master');
+    const admin = createPrismaClient(config.db, 'postgres');
     try {
-      await master.$queryRaw`SELECT 1 AS ok`;
-      logger.info({ attempt }, 'SQL Server is reachable');
-      return master;
+      await admin.$queryRaw`SELECT 1 AS ok`;
+      logger.info({ attempt }, 'PostgreSQL is reachable');
+      return admin;
     } catch (err) {
-      await master.$disconnect().catch(() => {});
+      await admin.$disconnect().catch(() => {});
       if (attempt >= attempts) {
-        throw new Error(`SQL Server did not become reachable after ${attempts} attempts: ${reason(err)}`);
+        throw new Error(`PostgreSQL did not become reachable after ${attempts} attempts: ${reason(err)}`);
       }
       const delay = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
-      logger.warn({ attempt, retryInMs: delay, reason: reason(err) }, 'SQL Server not ready yet, retrying');
+      logger.warn({ attempt, retryInMs: delay, reason: reason(err) }, 'PostgreSQL not ready yet, retrying');
       await sleep(delay);
     }
   }
 }
 
-async function ensureDatabase(master: Client) {
+async function ensureDatabase(admin: Client) {
   const name = config.db.name;
-  // The name is passed as a parameter; QUOTENAME makes it a safe identifier inside dynamic SQL.
-  await master.$executeRaw`
-    IF DB_ID(${name}) IS NULL
-    BEGIN
-      DECLARE @sql nvarchar(max) = N'CREATE DATABASE ' + QUOTENAME(${name});
-      EXEC (@sql);
-    END`;
-  logger.info({ database: name }, 'Database exists');
+  const rows = await admin.$queryRaw<unknown[]>`SELECT 1 FROM pg_database WHERE datname = ${name}`;
+  if (rows.length === 0) {
+    // CREATE DATABASE can't take a parameter. The name is safe to quote as an identifier:
+    // config.ts only allows letters, numbers, and underscores.
+    await admin.$executeRawUnsafe(`CREATE DATABASE "${name}"`);
+    logger.info({ database: name }, 'Database created');
+  } else {
+    logger.info({ database: name }, 'Database exists');
+  }
 }
 
 function runPrismaMigrateDeploy(): Promise<void> {
@@ -63,13 +64,13 @@ function runPrismaMigrateDeploy(): Promise<void> {
 }
 
 export async function prepareDatabase() {
-  logger.info({ host: config.db.host, port: config.db.port }, 'Step 1/3: waiting for SQL Server');
-  const master = await waitForSqlServer();
+  logger.info({ host: config.db.host, port: config.db.port }, 'Step 1/3: waiting for PostgreSQL');
+  const admin = await waitForPostgres();
   try {
     logger.info('Step 2/3: making sure the application database exists');
-    await ensureDatabase(master);
+    await ensureDatabase(admin);
   } finally {
-    await master.$disconnect();
+    await admin.$disconnect();
   }
   logger.info('Step 3/3: applying database migrations');
   await runPrismaMigrateDeploy();

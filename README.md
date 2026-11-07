@@ -1,12 +1,12 @@
 # Byte Bun Tech website
 
-Marketing website for Byte Bun Tech: a React landing page with a lead form that saves enquiries to SQL Server.
+Marketing website for Byte Bun Tech: a React landing page with a lead form that saves enquiries to PostgreSQL.
 
 | Part | Stack |
 |---|---|
 | Frontend | React 19, Vite, Tailwind CSS 4, JavaScript, Redux Toolkit (state), React Hook Form + yup (forms and validation), Lenis (smooth scrolling), axios (API calls) |
-| Backend | Node.js, NestJS 12 (Express platform), TypeScript, Prisma ORM (SQL Server adapter), yup validation, helmet, pino logs |
-| Database | SQL Server 2022 (Developer edition locally) |
+| Backend | Node.js, NestJS 12 (Express platform), TypeScript, Prisma ORM (PostgreSQL adapter), yup validation, helmet, pino logs |
+| Database | PostgreSQL 17 |
 | Runtime | Docker Compose |
 
 ## Run it
@@ -17,14 +17,14 @@ Requires Docker Desktop. First-time Windows setup (including keeping Docker data
 docker compose up --build
 ```
 
-The first start takes a few minutes (images download, SQL Server initializes). When the logs show `API listening on port 4000`, open:
+The first start takes a few minutes (images download, PostgreSQL initializes). When the logs show `API listening on port 4000`, open:
 
 | URL | What |
 |---|---|
 | http://localhost:5173 | Website (hot reload) |
 | http://localhost:5173/api/health | API health, through the dev proxy |
 | http://localhost:4000/api/health | API health, direct |
-| `127.0.0.1,1433` | SQL Server for SSMS or the VS Code mssql extension (user `sa`, password from `.env`, trust server certificate). Use `127.0.0.1`, not `localhost`: `localhost` can reach a Windows SQL Server install instead, or try IPv6, which Docker does not listen on. |
+| `127.0.0.1:5432` | PostgreSQL for psql, pgAdmin, DBeaver, or a VS Code PostgreSQL extension (database `bytebun`, user `bytebun`, password `ByteBun_Dev_Pass1` or `DB_PASSWORD` from `.env`, SSL off). Use `127.0.0.1`, not `localhost`: `localhost` can reach a Windows PostgreSQL install instead, or try IPv6, which Docker does not listen on. |
 
 A `.env` file is optional for local development; every value has a dev-only default. To change values, copy `.env.example` to `.env`.
 
@@ -36,7 +36,8 @@ A `.env` file is optional for local development; every value has a dev-only defa
 | Stop | `npm run down` |
 | Follow logs | `npm run logs` |
 | Delete all local data and start the database fresh | `npm run reset-db` (**deletes every saved lead**) |
-| Count saved leads | `docker compose exec db sh -c 'SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -d bytebun -Q "SELECT COUNT(*) FROM dbo.Leads"'` |
+| Count saved leads | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT COUNT(*) FROM leads"'` |
+| Open a SQL prompt | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` |
 | Change the database schema | Edit `backend/prisma/schema.prisma`, then `docker compose exec api npm run db:migrate:new -- --name what_changed` |
 | Edit copy, prices, links, FAQ | `frontend/src/content/site.js` (everything marked `PLACEHOLDER` needs a real value) |
 
@@ -47,10 +48,10 @@ Editing files under `frontend/src` or `backend/src` reloads the running app auto
 ## How it fits together
 
 ```
-browser ──► web (Vite :5173) ──/api proxy──► api (NestJS :4000) ──Prisma──► db (SQL Server :1433)
+browser ──► web (Vite :5173) ──/api proxy──► api (NestJS :4000) ──Prisma──► db (PostgreSQL :5432)
 ```
 
-On startup the API waits for SQL Server (with retries), creates the `bytebun` database if missing, applies Prisma migrations, then starts listening. The web container waits until the API reports healthy.
+On startup the API waits for PostgreSQL (with retries), creates the `bytebun` database if missing, applies Prisma migrations, then starts listening. The web container waits until the API reports healthy.
 
 In production, one container runs the NestJS API, which serves both the built site and `/api`. See [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md); after that, every push to `main` deploys automatically ([docs/DEPLOY-CD.md](docs/DEPLOY-CD.md)).
 
@@ -86,7 +87,7 @@ backend/
   src/main.ts             bootstrap: database startup, security middleware, /api prefix, listen
   src/app.module.ts       root NestJS module: wires the modules below, rate-limit guard, error filter
   src/config/             reads and validates environment variables (injectable as APP_CONFIG)
-  src/database/           PrismaService, startup sequence (wait for SQL Server, create DB, migrate)
+  src/database/           PrismaService, startup sequence (wait for PostgreSQL, create DB, migrate)
   src/leads/              POST /api/leads: controller, service, yup schema
   src/booking/            GET /api/booking/slots; availability.ts holds the call hours
   src/health/             GET /api/health

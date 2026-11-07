@@ -77,6 +77,9 @@ export const leadSchema = yup.object({
     .matches(/^[a-z0-9_-]+$/i, { message: 'Invalid source.', excludeEmptyString: true }),
   // Honeypot: hidden from people, often filled by bots. Must be empty.
   website: yup.string().transform(emptyToNull).nullable(),
+  // Milliseconds between the form opening and submit, sent by the site (not a form field).
+  // Too fast means a bot (see LeadsService). Optional, so a page loaded before this existed still works.
+  fillMs: yup.number().integer().min(0).nullable(),
 });
 
 export type LeadInput = yup.InferType<typeof leadSchema>;

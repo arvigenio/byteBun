@@ -26,14 +26,20 @@ export const fetchSlots = createAsyncThunk(
   { condition: (_, { getState }) => getState().leadForm.slots.status !== 'loading' },
 );
 
-export const submitLead = createAsyncThunk('leadForm/submit', async (values, { getState, rejectWithValue, signal }) => {
-  try {
-    return await createLead({ ...values, source: getState().leadForm.source }, { signal });
-  } catch (err) {
-    // Keep the rejected payload serializable (ApiError is a class instance).
-    return rejectWithValue({ message: err.message, fields: err.fields ?? {} });
-  }
-});
+export const submitLead = createAsyncThunk(
+  'leadForm/submit',
+  async (values, { getState, rejectWithValue, signal }) => {
+    try {
+      return await createLead({ ...values, source: getState().leadForm.source }, { signal });
+    } catch (err) {
+      // Keep the rejected payload serializable (ApiError is a class instance).
+      return rejectWithValue({ message: err.message, fields: err.fields ?? {} });
+    }
+  },
+  // One submit at a time: a fast double click (or Enter + click) must not send the lead twice.
+  // `pending` sets status synchronously, so the second dispatch sees 'sending' and is dropped.
+  { condition: (_, { getState }) => getState().leadForm.status !== 'sending' },
+);
 
 const leadFormSlice = createSlice({
   name: 'leadForm',

@@ -1,23 +1,21 @@
-import { PrismaMssql } from '@prisma/adapter-mssql';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import type { DbConfig } from '../config/config';
 
-// Prisma 7 talks to SQL Server through a driver adapter (built on the mssql package).
+// Prisma 7 talks to PostgreSQL through a driver adapter (built on the pg package).
 // All Prisma queries, including $queryRaw tagged templates, are parameterized.
 export function prismaOptions(db: DbConfig, database = db.name) {
-  const adapter = new PrismaMssql({
-    server: db.host,
+  const adapter = new PrismaPg({
+    host: db.host,
     port: db.port,
     database,
     user: db.user,
     password: db.password,
-    connectionTimeout: 5_000,
-    requestTimeout: 15_000,
-    pool: { max: 10, min: 0, idleTimeoutMillis: 30_000 },
-    options: {
-      encrypt: true,
-      trustServerCertificate: db.trustServerCertificate,
-    },
+    ssl: db.ssl,
+    connectionTimeoutMillis: 5_000,
+    statement_timeout: 15_000,
+    max: 10,
+    idleTimeoutMillis: 30_000,
   });
   return {
     adapter,
@@ -28,5 +26,5 @@ export function prismaOptions(db: DbConfig, database = db.name) {
   } satisfies Prisma.PrismaClientOptions;
 }
 
-// A standalone client, e.g. for the `master` database during startup (outside Nest).
+// A standalone client, e.g. for the `postgres` maintenance database during startup (outside Nest).
 export const createPrismaClient = (db: DbConfig, database?: string) => new PrismaClient(prismaOptions(db, database));

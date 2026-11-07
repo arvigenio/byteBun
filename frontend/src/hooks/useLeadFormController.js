@@ -26,6 +26,12 @@ export function useLeadFormController() {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState('next'); // which way the step animation slides
   const [nudge, setNudge] = useState(0); // bumped when a step is invalid, to replay a shake
+  // When the form opened. The API gets the elapsed time as `fillMs` and drops impossibly fast
+  // submissions as bots.
+  const openedAt = useRef(0);
+  useEffect(() => {
+    openedAt.current = Date.now();
+  }, []);
 
   const {
     register,
@@ -87,7 +93,7 @@ export function useLeadFormController() {
     async (data) => {
       if (sending) return;
       try {
-        await dispatch(submitLead(data)).unwrap();
+        await dispatch(submitLead({ ...data, fillMs: Date.now() - openedAt.current })).unwrap();
       } catch (err) {
         // Show the server's per-field messages next to their fields, on the earliest step with one.
         const fields = Object.entries(err?.fields ?? {}).filter(([name]) => name in emptyLead);

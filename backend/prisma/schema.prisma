@@ -10,46 +10,46 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlserver"
+  provider = "postgresql"
 }
 
+// Tables and columns use snake_case so they can be queried in psql without quoting.
 model Lead {
-  id           Int      @id @default(autoincrement()) @map("Id")
-  firstName    String   @map("FirstName") @db.NVarChar(50)
-  lastName     String   @map("LastName") @db.NVarChar(50)
-  email        String   @map("Email") @db.NVarChar(254)
-  phone        String?  @map("Phone") @db.NVarChar(40)
-  businessName String?  @map("BusinessName") @db.NVarChar(160)
-  businessType String   @map("BusinessType") @db.NVarChar(80)
+  id           Int      @id @default(autoincrement())
+  firstName    String   @map("first_name") @db.VarChar(50)
+  lastName     String   @map("last_name") @db.VarChar(50)
+  email        String   @db.VarChar(254)
+  phone        String?  @db.VarChar(40)
+  businessName String?  @map("business_name") @db.VarChar(160)
+  businessType String   @map("business_type") @db.VarChar(80)
   // JSON arrays of option keys, e.g. ["more-bookings","other"] (src/leads/lead-options.ts).
-  goals        String?  @map("Goals") @db.NVarChar(1000)
+  goals        String?  @db.VarChar(1000)
   // The visitor's own words when "other" is one of the goals.
-  goalsOther   String?  @map("GoalsOther") @db.NVarChar(200)
-  features     String?  @map("Features") @db.NVarChar(1000)
-  message      String?  @map("Message") @db.NVarChar(2000)
-  source       String   @default("website") @map("Source") @db.NVarChar(50)
-  // Stored in UTC; the database fills it with SYSUTCDATETIME().
-  createdAt    DateTime @default(dbgenerated("sysutcdatetime()")) @map("CreatedAt") @db.DateTime2
-  status       String   @default("new") @map("Status") @db.NVarChar(30)
+  goalsOther   String?  @map("goals_other") @db.VarChar(200)
+  features     String?  @db.VarChar(1000)
+  message      String?  @db.VarChar(2000)
+  source       String   @default("website") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  status       String   @default("new") @db.VarChar(30)
   booking      Booking?
 
-  @@index([createdAt], map: "IX_Leads_CreatedAt")
-  @@index([email], map: "IX_Leads_Email")
-  @@map("Leads")
+  @@index([createdAt], map: "ix_leads_created_at")
+  @@index([email], map: "ix_leads_email")
+  @@map("leads")
 }
 
-// The free call a lead booked on the lead page. One per lead; StartsAt is unique, so a slot
+// The free call a lead booked on the lead page. One per lead; starts_at is unique, so a slot
 // can't be booked twice (the API answers 409 if two people race for it).
 // To free a slot (e.g. a cancelled call), delete its row here.
 model Booking {
-  id        Int      @id @default(autoincrement()) @map("Id")
-  leadId    Int      @unique @map("LeadId")
+  id        Int      @id @default(autoincrement())
+  leadId    Int      @unique @map("lead_id")
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  // Call start in UTC. Availability rules: src/booking/availability.js.
-  startsAt  DateTime @unique @map("StartsAt") @db.DateTime2
+  // Call start (an absolute instant). Availability rules: src/booking/availability.ts.
+  startsAt  DateTime @unique @map("starts_at") @db.Timestamptz(3)
   // The visitor's time zone when they booked (IANA name, e.g. "America/New_York").
-  timeZone  String?  @map("TimeZone") @db.NVarChar(64)
-  createdAt DateTime @default(dbgenerated("sysutcdatetime()")) @map("CreatedAt") @db.DateTime2
+  timeZone  String?  @map("time_zone") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  @@map("Bookings")
+  @@map("bookings")
 }

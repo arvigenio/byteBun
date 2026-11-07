@@ -2,7 +2,7 @@
   "name": "bytebun-api",
   "version": "1.0.0",
   "private": true,
-  "description": "Byte Bun Tech API: NestJS + TypeScript, Prisma ORM on SQL Server.",
+  "description": "Byte Bun Tech API: NestJS + TypeScript, Prisma ORM on PostgreSQL.",
   "engines": {
     "node": ">=22.22"
   },
@@ -20,7 +20,7 @@
     "@nestjs/core": "^12.4.0",
     "@nestjs/platform-express": "^12.4.0",
     "@nestjs/throttler": "^6.7.1",
-    "@prisma/adapter-mssql": "7.10.1",
+    "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "express": "^5.3.0",
     "helmet": "^8.3.0",

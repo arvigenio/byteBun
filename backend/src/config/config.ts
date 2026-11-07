@@ -10,7 +10,8 @@ export interface DbConfig {
   name: string;
   user: string;
   password: string;
-  trustServerCertificate: boolean;
+  /** Connect over TLS (needed for most managed PostgreSQL hosts; off for the Compose db). */
+  ssl: boolean;
 }
 
 export interface AppConfig {
@@ -64,8 +65,8 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const dbName = required('DB_NAME');
   // The database name is used as an identifier when creating the database, so restrict it.
-  if (dbName && !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(dbName)) {
-    problems.push('DB_NAME may only contain letters, numbers, and underscores, and must not start with a number.');
+  if (dbName && !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(dbName)) {
+    problems.push('DB_NAME may only contain letters, numbers, and underscores (at most 63), and must not start with a number.');
   }
 
   const frontendOrigins = required('FRONTEND_ORIGIN')
@@ -90,11 +91,11 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     staticDir: path.resolve(env.STATIC_DIR?.trim() || path.join(backendRoot, '../frontend/dist')),
     db: {
       host: required('DB_HOST'),
-      port: int('DB_PORT', 1433, { min: 1, max: 65535 }),
+      port: int('DB_PORT', 5432, { min: 1, max: 65535 }),
       name: dbName,
       user: required('DB_USER'),
       password: required('DB_PASSWORD'),
-      trustServerCertificate: bool('DB_TRUST_SERVER_CERT', true),
+      ssl: bool('DB_SSL', false),
     },
     leadsRateLimit: {
       max: int('LEADS_RATE_LIMIT_MAX', 5, { min: 1 }),

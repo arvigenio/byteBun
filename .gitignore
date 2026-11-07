@@ -3,7 +3,7 @@ node_modules/
 dist/
 .cache/
 
-# Local data (SQL Server files live here in development)
+# Local data (not used by the Compose database, which lives in a Docker volume)
 .data/
 
 # Secrets

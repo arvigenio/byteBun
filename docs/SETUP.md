@@ -63,7 +63,7 @@ Only move the distro that holds data (`docker-desktop-data` on older versions; o
 
 ## 5. Optional but recommended
 
-**Limit memory Docker can use.** SQL Server needs about **2 GB** of RAM available to Docker. Create `C:\Users\<your name>\.wslconfig` (this file must be on C:, it's tiny):
+**Limit memory Docker can use.** The app needs well under 2 GB, so a cap keeps WSL from taking more RAM than it needs. Create `C:\Users\<your name>\.wslconfig` (this file must be on C:, it's tiny):
 
 ```ini
 [wsl2]
@@ -85,7 +85,6 @@ npm config set cache D:\npm-cache
 - [ ] Docker Desktop → Settings → Resources → Advanced shows `D:\Docker\data` (or your D: path).
 - [ ] `D:\Docker\data` contains a large `.vhdx` file (several GB after the first run).
 - [ ] `C:\Users\<your name>\AppData\Local\Docker` is small (under a few hundred MB, mostly logs).
-- [ ] After the first run, `D:\Byte Bun\bytebun-web\.data\mssql` exists (SQL Server's files).
 
 ## 7. First run
 
@@ -94,32 +93,20 @@ cd "D:\Byte Bun\bytebun-web"
 docker compose up --build
 ```
 
-The first run downloads about 2 GB (mostly the SQL Server image) and can take 5 to 10 minutes. You're ready when you see `API listening on port 4000`. Open http://localhost:5173.
+The first run downloads the Node and PostgreSQL images and installs dependencies, which can take a few minutes. You're ready when you see `API listening on port 4000`. Open http://localhost:5173.
 
-Optional: copy `.env.example` to `.env` to set your own passwords. If you change `MSSQL_SA_PASSWORD` after the database was created, SQL Server keeps the old one: either set it back, or run `npm run reset-db` (deletes local data).
+Optional: copy `.env.example` to `.env` to set your own passwords. If you change `DB_USER`, `DB_PASSWORD`, or `DB_NAME` after the database was created, PostgreSQL keeps the old ones: either set them back, or run `npm run reset-db` (deletes local data).
 
 ## Troubleshooting
 
-**SQL Server is slow to start / API keeps retrying.**
-Normal on first start: SQL Server needs 20 to 60 seconds. The API retries for about two minutes. Watch with `docker compose logs -f db`. If it never becomes healthy, check the next items.
+**API keeps retrying the database.**
+Normal for a few seconds on first start while PostgreSQL initializes. The API retries for about two minutes. Watch with `docker compose logs -f db`. If it never becomes healthy, check the next items.
 
-**SQL Server exits right away.**
-Run `docker compose logs db`. Common causes:
-- *Password doesn't meet complexity rules*: at least 8 characters, with upper case, lower case, a number, and a symbol. Avoid `$`.
-- *Out of memory*: give Docker at least 2 GB (see `.wslconfig` above).
-- *File or I/O errors on `/var/opt/mssql`*: some Windows setups don't support SQL Server's files on a bind-mounted Windows folder. Switch the database to a Docker volume (still on D: after step 4). Create `docker-compose.override.yml` next to `docker-compose.yml`:
-  ```yaml
-  services:
-    db:
-      volumes: !override
-        - mssql-dev-data:/var/opt/mssql
-  volumes:
-    mssql-dev-data:
-  ```
-  Compose picks it up automatically. To reset that data use `docker compose down -v` instead of `npm run reset-db`.
+**`password authentication failed for user "bytebun"`.**
+The database volume was created with different credentials than your current `.env`. Set `DB_USER` / `DB_PASSWORD` / `DB_NAME` back, or run `npm run reset-db` (deletes local data).
 
-**Port already in use** (`5173`, `4000`, or `1433`).
-Something else is using the port, often a local SQL Server install (1433). Either stop that program, or set a different port in `.env` (`WEB_PORT`, `API_PORT`). For 1433, edit the `ports` line of `db` in `docker-compose.yml`, for example `"127.0.0.1:14330:1433"`.
+**Port already in use** (`5173`, `4000`, or `5432`).
+Something else is using the port, often a local PostgreSQL install (5432). Either stop that program, or set a different port in `.env` (`WEB_PORT`, `API_PORT`, or `DB_HOST_PORT`, for example `DB_HOST_PORT=5433`).
 
 **`exec ... no such file or directory` or `/bin/sh^M` errors.**
 A file got Windows line endings (CRLF). The repo's `.gitattributes` forces LF; if you created or edited files outside Git, convert them to LF in your editor (VS Code: bottom-right "CRLF" → "LF"), then rebuild.

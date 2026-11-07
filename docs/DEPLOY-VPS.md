@@ -3,14 +3,14 @@
 Production runs two containers from `docker-compose.prod.yml`:
 
 - **app**: one image with the NestJS API serving the built website and `/api`. Published on `127.0.0.1:APP_PORT` only.
-- **db**: SQL Server, data in the `mssql-data` Docker volume. **No published port**, so it isn't reachable from outside.
+- **db**: PostgreSQL 17, data in the `pg-data` Docker volume. **No published port**, so it isn't reachable from outside.
 
 Your reverse proxy (Caddy, Nginx, or Traefik) handles HTTPS and forwards to the app.
 
 ## Requirements
 
-- Linux VPS on **x86-64 (amd64)**. The SQL Server image does not run on ARM servers.
-- At least **2 GB RAM free for SQL Server**, so 4 GB total is a sensible minimum.
+- Linux VPS, x86-64 or ARM64.
+- At least **1 GB RAM** (2 GB is comfortable, mostly for the Docker build).
 - Docker Engine with the Compose plugin (`docker compose version` works).
 - A domain pointing to the server (DNS A/AAAA record).
 
@@ -66,9 +66,11 @@ Commands assume Ubuntu 22.04/24.04. `you` is your VPS user, `yourdomain.com` you
    chmod 600 .env
    nano .env
    ```
-   Set at least: `NODE_ENV=production`, `SITE_URL=https://yourdomain.com`, `FRONTEND_ORIGIN=https://yourdomain.com`, a new strong `MSSQL_SA_PASSWORD`, and the same value in `DB_PASSWORD`. Generate a password with `openssl rand -base64 24` and add a symbol if it lacks one; avoid `$`.
+   Set at least: `NODE_ENV=production`, `SITE_URL=https://yourdomain.com`, `FRONTEND_ORIGIN=https://yourdomain.com`, and a new strong `DB_PASSWORD`. Generate one with `openssl rand -hex 24`; avoid `$`.
 
-   SQL Server edition: the default is `MSSQL_PID=Express` (free, 10 GB per database). Developer edition is not licensed for production. To use a paid edition, set `MSSQL_PID` and make sure you have the license.
+   The db container creates the `DB_USER` role and `DB_NAME` database with that password on its **first** start. Changing `DB_PASSWORD` later doesn't change the role's password; do that in psql (`ALTER ROLE bytebun PASSWORD '...'`), then update `.env`.
+
+   To use a managed PostgreSQL instead of the db container, point `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD` at it, set `DB_SSL=true`, and remove the `db` service and the app's `depends_on`.
 
 5. **Build and start** (the first build takes several minutes):
    ```bash
@@ -93,22 +95,19 @@ Commands assume Ubuntu 22.04/24.04. `you` is your VPS user, `yourdomain.com` you
    ```
    Nginx equivalent: `proxy_pass http://127.0.0.1:4000;` with `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and `proxy_set_header X-Forwarded-Proto $scheme;`, plus a certificate from Certbot.
 
-   The API trusts one proxy hop (`TRUST_PROXY=1`), so rate limits use the visitor's real IP. If you add a CDN in front of the proxy, increase it to the number of hops. Don't expose the app port publicly: with `TRUST_PROXY` set, anyone reaching it directly could fake their IP.
+   The API trusts one proxy hop (`TRUST_PROXY=1`), so rate limits use the visitor's real IP. **Behind Cloudflare, keep it at 1**: the app recognizes Cloudflare's addresses and reads the visitor's IP from the `CF-Connecting-IP` header (only when the request really came from Cloudflare, so it can't be faked; see `backend/src/common/client-ip.ts`). For a different CDN, increase it to the number of hops. Don't expose the app port publicly: with `TRUST_PROXY` set, anyone reaching it directly could fake their IP.
 
    If your proxy runs in Docker (e.g. Traefik), attach it to the `bytebun` network and route to `app:4000` instead of using the published port.
 
 ## Backups
 
-Create a backup inside the db container, then copy it to the host:
+Dump the database with `pg_dump` (custom format, compressed) straight to the host:
 
 ```bash
 cd /opt/bytebun-web
-docker compose -f docker-compose.prod.yml exec db bash -c '
-  mkdir -p /var/opt/mssql/backup &&
-  SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b \
-    -Q "BACKUP DATABASE [bytebun] TO DISK = N'"'"'/var/opt/mssql/backup/bytebun.bak'"'"' WITH INIT"'
 mkdir -p backups
-docker compose -f docker-compose.prod.yml cp db:/var/opt/mssql/backup/bytebun.bak "backups/bytebun-$(date +%F).bak"
+docker compose -f docker-compose.prod.yml exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "backups/bytebun-$(date +%F).dump"
 ```
 
 Schedule it (e.g. daily with cron), and copy backups **off the server** (object storage or another machine). Test a restore occasionally.
@@ -117,10 +116,8 @@ Schedule it (e.g. daily with cron), and copy backups **off the server** (object 
 
 ```bash
 docker compose -f docker-compose.prod.yml stop app
-docker compose -f docker-compose.prod.yml cp backups/bytebun-YYYY-MM-DD.bak db:/var/opt/mssql/backup/restore.bak
-docker compose -f docker-compose.prod.yml exec db bash -c '
-  SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b \
-    -Q "RESTORE DATABASE [bytebun] FROM DISK = N'"'"'/var/opt/mssql/backup/restore.bak'"'"' WITH REPLACE"'
+docker compose -f docker-compose.prod.yml exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner' \
+  < backups/bytebun-YYYY-MM-DD.dump
 docker compose -f docker-compose.prod.yml start app
 ```
 
@@ -143,8 +140,8 @@ Database migrations in `backend/prisma/migrations` run automatically when the ap
 - [ ] **Firewall**: allow only SSH (22), HTTP (80), and HTTPS (443). E.g. `ufw default deny incoming && ufw allow OpenSSH && ufw allow 80,443/tcp && ufw enable`. Note that Docker-published ports can bypass ufw; this setup only publishes on `127.0.0.1`, so that's fine.
 - [ ] **No root logins**: deploy as a normal user with sudo; disable SSH password login and root login (`PermitRootLogin no`, `PasswordAuthentication no`).
 - [ ] **HTTPS** via the reverse proxy; HTTP redirects to HTTPS.
-- [ ] **Secrets**: `.env` is `chmod 600`, never committed, and the SA password is unique to this server.
-- [ ] **Database not exposed**: `docker compose -f docker-compose.prod.yml ps` shows no `0.0.0.0:1433`.
+- [ ] **Secrets**: `.env` is `chmod 600`, never committed, and `DB_PASSWORD` is unique to this server.
+- [ ] **Database not exposed**: `docker compose -f docker-compose.prod.yml ps` shows no `0.0.0.0:5432`.
 - [ ] **Backups** run on a schedule, are stored off-server, and a restore has been tested.
 - [ ] **Updates**: enable unattended OS security updates; update Docker images regularly (`docker compose ... pull` then `up -d --build`).
 - [ ] The app container runs as a non-root user (built into the image).

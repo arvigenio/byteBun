@@ -10,6 +10,25 @@ import { featureLabel, goalLabel, OTHER_GOAL } from './lead-options';
 
 const slotTakenMessage = 'Sorry, that time was just booked. Please choose another time.';
 
+// No person gets through a multi-step form this fast; a script filling the real page does.
+const MIN_FILL_MS = 3_000;
+
+// Namespace for pg_advisory_xact_lock(key1, key2), so these locks can't collide with others.
+const LEAD_EMAIL_LOCK = 7301;
+
+function formatCallTime(startsAt: Date, timeZone: string | null): string {
+  const tz = timeZone || 'UTC';
+  const when = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(startsAt);
+  return `${when} (${tz})`;
+}
+
 // What is saved and sent to the webhook (everything except internal columns).
 const leadSelect = {
   id: true,
@@ -59,11 +78,16 @@ export class LeadsService {
   ) {}
 
   /** Saves a lead and its booked call. Returns the new lead id (none for honeypot hits). */
-  async create(input: LeadInput): Promise<{ id?: number }> {
-    const { website, ...data } = input;
+  // `ip` is only logged (to spot abuse), never saved.
+  async create(input: LeadInput, { ip }: { ip?: string } = {}): Promise<{ id?: number }> {
+    const { website, fillMs, ...data } = input;
+    // Looks like a bot. Pretend it worked so it doesn't retry, but save nothing.
     if (website) {
-      // Looks like a bot. Pretend it worked so it doesn't retry, but save nothing.
-      logger.warn('Lead rejected by honeypot');
+      logger.warn({ ip }, 'Lead rejected by honeypot');
+      return {};
+    }
+    if (fillMs != null && fillMs < MIN_FILL_MS) {
+      logger.warn({ ip, fillMs }, 'Lead rejected: form filled too fast');
       return {};
     }
 
@@ -76,29 +100,43 @@ export class LeadsService {
     }
 
     try {
-      const lead = await this.prisma.lead.create({
-        data: {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          phone: data.phone ?? null,
-          businessName: data.businessName ?? null,
-          businessType: data.businessType === OTHER_BUSINESS_TYPE ? `Other: ${data.businessTypeOther}` : data.businessType,
-          goals: JSON.stringify([...new Set(data.goals)]),
-          goalsOther: data.goals.includes(OTHER_GOAL) ? (data.goalsOther ?? null) : null,
-          features: JSON.stringify([...new Set(data.features)]),
-          message: data.message ?? null,
-          source: data.source || 'website',
-          booking: { create: { startsAt: data.meetingAt, timeZone: data.timeZone ?? null } },
-        },
-        select: leadSelect,
+      const lead = await this.prisma.$transaction(async (tx) => {
+        // One upcoming call per email. The lock (held until the transaction ends) makes two
+        // submissions with the same email take turns, so both can't pass the check at once.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LEAD_EMAIL_LOCK}::int, hashtext(${data.email}))`;
+        const upcoming = await tx.booking.findFirst({
+          where: { lead: { email: data.email }, startsAt: { gt: new Date() } },
+          select: { startsAt: true, timeZone: true },
+        });
+        if (upcoming) {
+          const message = `You already have a call booked for ${formatCallTime(upcoming.startsAt, upcoming.timeZone)}. To change it, email us.`;
+          throw new ApiError(409, { error: 'already_booked', message, fields: { email: message } });
+        }
+
+        return tx.lead.create({
+          data: {
+            firstName: data.firstName,
+            lastName: data.lastName,
+            email: data.email,
+            phone: data.phone ?? null,
+            businessName: data.businessName ?? null,
+            businessType: data.businessType === OTHER_BUSINESS_TYPE ? `Other: ${data.businessTypeOther}` : data.businessType,
+            goals: JSON.stringify([...new Set(data.goals)]),
+            goalsOther: data.goals.includes(OTHER_GOAL) ? (data.goalsOther ?? null) : null,
+            features: JSON.stringify([...new Set(data.features)]),
+            message: data.message ?? null,
+            source: data.source || 'website',
+            booking: { create: { startsAt: data.meetingAt, timeZone: data.timeZone ?? null } },
+          },
+          select: leadSelect,
+        });
       });
 
-      logger.info({ leadId: lead.id }, 'Lead saved');
+      logger.info({ leadId: lead.id, ip }, 'Lead saved');
       this.webhook.notifyLeadCreated(toSavedLead(lead)); // fire and forget; never affects the response
       return { id: lead.id };
     } catch (err) {
-      // Unique index on Bookings.StartsAt: someone else booked this slot a moment earlier.
+      // Unique index on bookings.starts_at: someone else booked this slot a moment earlier.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ApiError(409, { error: 'slot_taken', message: slotTakenMessage, fields: { meetingAt: slotTakenMessage } });
       }
