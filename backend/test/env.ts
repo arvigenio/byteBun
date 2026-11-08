@@ -15,6 +15,8 @@ process.env.MAIL_FROM = 'Byte Bun Admin <admin@bytebuntech.com>';
 process.env.SECURITY_ALERT_WEBHOOK_URL = '';
 // Tests read the real recipients from the in-memory outbox; a local .env value must not redirect them.
 process.env.TESTING_EMAIL_ADDRESS = '';
+// The tests check the limits, so they are always on here.
+process.env.RATE_LIMITS_DISABLED = '';
 process.env.CALL_MEETING_URL = '';
 process.env.SITE_URL = 'http://localhost:5173';
 process.env.N8N_WEBHOOK_URL = '';

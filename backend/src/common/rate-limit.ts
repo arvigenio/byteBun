@@ -15,8 +15,9 @@ const isStrict = (ctx: ExecutionContext) => Reflect.getMetadata(STRICT, ctx.getH
 
 export const rateLimitOptions = (cfg: AppConfig): ThrottlerModuleOptions => ({
   throttlers: [
-    { name: 'api', ttl: 15 * 60_000, limit: 300 },
-    { name: 'strict', ttl: cfg.leadsRateLimit.windowMs, limit: cfg.leadsRateLimit.max, skipIf: (ctx) => !isStrict(ctx) },
+    // RATE_LIMITS_DISABLED=true turns both off (testing only).
+    { name: 'api', ttl: 15 * 60_000, limit: 300, skipIf: () => cfg.rateLimitsDisabled },
+    { name: 'strict', ttl: cfg.leadsRateLimit.windowMs, limit: cfg.leadsRateLimit.max, skipIf: (ctx) => cfg.rateLimitsDisabled || !isStrict(ctx) },
   ],
 });
 

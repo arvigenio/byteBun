@@ -27,6 +27,8 @@ export interface AppConfig {
   staticDir: string;
   db: DbConfig;
   leadsRateLimit: { max: number; windowMs: number };
+  /** RATE_LIMITS_DISABLED=true: no request limits at all (sign-in, codes, lead form, API). For testing only. */
+  rateLimitsDisabled: boolean;
   integrations: { n8nWebhookUrl: string };
   auth: AuthConfig;
   mail: MailConfig;
@@ -191,6 +193,7 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       password: required('DB_PASSWORD'),
       ssl: bool('DB_SSL', false),
     },
+    rateLimitsDisabled: bool('RATE_LIMITS_DISABLED', false),
     leadsRateLimit: {
       max: int('LEADS_RATE_LIMIT_MAX', 5, { min: 1 }),
       windowMs: int('LEADS_RATE_LIMIT_WINDOW_MINUTES', 15, { min: 1 }) * 60_000,
@@ -209,6 +212,10 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     booking: { siteUrl, meetingUrl },
   };
+
+  if (bool('RATE_LIMITS_DISABLED', false)) {
+    console.warn('RATE_LIMITS_DISABLED is on: sign-in, code and lead form request limits are OFF. Turn it off again after testing.');
+  }
 
   if (problems.length) {
     console.error('\nConfiguration error. The API cannot start until these are fixed:\n');

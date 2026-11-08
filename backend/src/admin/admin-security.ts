@@ -13,6 +13,7 @@ import type { SecurityAlerts } from '../auth/security-alerts';
 import { hitCounter } from '../auth/security-counter';
 import { ApiError } from '../common/api-error';
 import { YupValidationPipe } from '../common/yup-validation.pipe';
+import { APP_CONFIG, type AppConfig } from '../config/config';
 import { PrismaService } from '../database/prisma.service';
 
 const codeSchema = yup.object({
@@ -31,6 +32,7 @@ export class AdminSecurityController {
     @Inject(AUTH) private readonly auth: Auth,
     @Inject(SECURITY_ALERTS) private readonly alerts: SecurityAlerts,
     private readonly prisma: PrismaService,
+    @Inject(APP_CONFIG) private readonly cfg: AppConfig,
   ) {}
 
   // GET /api/admin/me -> the signed-in admin (the admin app calls this to check access)
@@ -88,7 +90,7 @@ export class AdminSecurityController {
   @HttpCode(200)
   async regenerate(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body(new YupValidationPipe(codeSchema)) body: { code: string }) {
     const { user } = req.admin!;
-    const hit = await hitCounter(this.prisma as unknown as PrismaClient, `regen-backup:${user.id}`, REGENERATE_LIMIT.windowMs);
+    const hit = this.cfg.rateLimitsDisabled ? { count: 0 } : await hitCounter(this.prisma as unknown as PrismaClient, `regen-backup:${user.id}`, REGENERATE_LIMIT.windowMs);
     if (hit.count > REGENERATE_LIMIT.max) {
       throw new ApiError(429, { error: 'rate_limited', message: 'Too many attempts. Please wait a few minutes and try again.' });
     }

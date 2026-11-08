@@ -6,6 +6,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../src/app';
+import { ADMINS } from '../src/auth/admins';
 import { outbox, type SentMail } from '../src/auth/mailer';
 import { config } from '../src/config/config';
 import { createPrismaClient } from '../src/database/prisma-options';
@@ -67,6 +68,7 @@ export async function resetState(prisma: PrismaClient) {
   );
   await prisma.$executeRawUnsafe(`DELETE FROM auth_users WHERE email NOT IN ('${JOSUE}', '${ARVI}')`);
   await prisma.user.updateMany({ data: { twoFactorEnabled: false, banned: false, role: 'admin' } });
+  for (const a of ADMINS) await prisma.user.updateMany({ where: { email: a.email }, data: { name: a.name } });
   outbox.length = 0;
 }
 

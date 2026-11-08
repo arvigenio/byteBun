@@ -139,7 +139,8 @@ export function createAuth({ cfg, prisma, mailer, alerts }: AuthDeps) {
     },
 
     rateLimit: {
-      enabled: true, // also in development and tests, so the limits are exercised
+      // Also in development and tests, so the limits are exercised. RATE_LIMITS_DISABLED=true: off.
+      enabled: !cfg.rateLimitsDisabled,
       storage: 'database',
       window: 60,
       max: 100,
@@ -220,7 +221,7 @@ export function createAuth({ cfg, prisma, mailer, alerts }: AuthDeps) {
           if (ctx.body?.type !== 'sign-in') throw new APIError('BAD_REQUEST', { message: 'Unsupported code type.' });
           const email = normEmail(ctx.body?.email);
           // Counted for every address alike, so this limit doesn't reveal which emails exist.
-          if (email) {
+          if (email && !cfg.rateLimitsDisabled) {
             const hit = await hitCounter(prisma, `otp-send:${email}`, OTP_SENDS_PER_EMAIL.windowMs);
             if (hit.count > OTP_SENDS_PER_EMAIL.max) {
               throw new APIError('TOO_MANY_REQUESTS', { message: 'Too many codes requested. Please wait a few minutes and try again.' });

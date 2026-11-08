@@ -48,6 +48,8 @@ services:
       DB_SSL: ${DB_SSL:-false}
       LEADS_RATE_LIMIT_MAX: ${LEADS_RATE_LIMIT_MAX:-5}
       LEADS_RATE_LIMIT_WINDOW_MINUTES: ${LEADS_RATE_LIMIT_WINDOW_MINUTES:-15}
+      # true = no request limits (sign-in, codes, lead form). For testing only; leave unset normally.
+      RATE_LIMITS_DISABLED: ${RATE_LIMITS_DISABLED:-false}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
       # Admin sign-in. Dev defaults work as-is; without SMTP_HOST, emails (with the sign-in

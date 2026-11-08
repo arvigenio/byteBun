@@ -2,7 +2,11 @@ import './env';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import request from 'supertest';
+import type { PrismaClient } from '@prisma/client';
+import type { Auth } from '../src/auth/auth';
+import { AUTH } from '../src/auth/auth.module';
 import { outbox } from '../src/auth/mailer';
+import { ensureAdmins } from '../src/auth/seed-admins';
 import {
   ARVI,
   alertMails,
@@ -422,6 +426,43 @@ describe('alerts', () => {
     await t.prisma.$executeRawUnsafe('TRUNCATE auth_rate_limits');
     await requestCode(b, ARVI);
     await waitForAlert('Sign-in code requested', (m) => m.text.includes(`Account: ${ARVI}`));
+  });
+});
+
+describe('admins on startup', () => {
+  it('a missing admin is created; existing admins are left exactly as they are', async () => {
+    const b = browser(t.server);
+    await enroll(b, ARVI);
+    await t.prisma.user.delete({ where: { email: JOSUE } });
+    await t.prisma.user.update({ where: { email: ARVI }, data: { name: 'Arvi G.' } });
+
+    const results = await ensureAdmins(t.app.get<Auth>(AUTH), t.prisma as unknown as PrismaClient);
+    assert.deepEqual(
+      results.map((r) => [r.email, r.action]),
+      [
+        [JOSUE, 'created'],
+        [ARVI, 'ok'],
+      ],
+    );
+    const josue = await t.prisma.user.findUniqueOrThrow({ where: { email: JOSUE } });
+    assert.equal(josue.role, 'admin');
+    assert.equal(josue.emailVerified, true);
+    assert.equal(josue.name, 'Josue Mapagdalita');
+    assert.equal(await t.prisma.account.count({ where: { userId: josue.id } }), 0, 'no password');
+
+    const arvi = await t.prisma.user.findUniqueOrThrow({ where: { email: ARVI } });
+    assert.equal(arvi.twoFactorEnabled, true, 'authenticator kept');
+    assert.equal(arvi.name, 'Arvi G.', 'not overwritten');
+    assert.equal((await b.get('/api/admin/me')).status, 200, 'still signed in');
+
+    // Running it again changes nothing.
+    assert.deepEqual(
+      (await ensureAdmins(t.app.get<Auth>(AUTH), t.prisma as unknown as PrismaClient)).map((r) => r.action),
+      ['ok', 'ok'],
+    );
+    // The new admin can sign in straight away (first sign-in: authenticator setup).
+    await clearRateLimits(t.prisma);
+    assert.deepEqual((await emailStep(browser(t.server), JOSUE)).body, { next: 'setup' });
   });
 });
 
