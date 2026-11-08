@@ -29,6 +29,11 @@ export async function createApp({ serveStatic = config.isProd } = {}): Promise<N
         directives: {
           // HTTPS upgrades are the reverse proxy's job; this keeps local http testing working.
           upgradeInsecureRequests: null,
+          // Cloudflare Web Analytics: Cloudflare injects its beacon script into pages it serves,
+          // and the beacon reports to cloudflareinsights.com. Only these two origins are added;
+          // everything else stays 'self' (live admin updates use same-origin WebSockets).
+          scriptSrc: ["'self'", 'https://static.cloudflareinsights.com'],
+          connectSrc: ["'self'", 'https://cloudflareinsights.com'],
         },
       },
     }),
