@@ -71,7 +71,7 @@ export function GetStartedPage() {
 }
 
 // Soft drifting color shapes behind the page.
-function Backdrop() {
+export function Backdrop() {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-clip">
       <div className="absolute -top-32 -left-24 size-[460px] rounded-full bg-lavender-mist blur-3xl motion-safe:animate-drift" />
@@ -531,6 +531,6 @@ function FieldError({ id, error }) {
   );
 }
 
-function Spinner() {
+export function Spinner() {
   return <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-midnight-plum/30 border-t-midnight-plum motion-reduce:animate-none" />;
 }

@@ -50,6 +50,25 @@ services:
       LEADS_RATE_LIMIT_WINDOW_MINUTES: ${LEADS_RATE_LIMIT_WINDOW_MINUTES:-15}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+      # Admin sign-in. Dev defaults work as-is; without SMTP_HOST, emails (with the sign-in
+      # code) are printed in this container's log:  docker compose logs -f api
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:5173}
+      LOGIN_PATH: ${LOGIN_PATH:-/bb-admin-portal}
+      ALERT_EMAILS: ${ALERT_EMAILS:-josue.mapagdalita@bytebuntech.com,arvi.genio@bytebuntech.com}
+      SECURITY_ALERT_WEBHOOK_URL: ${SECURITY_ALERT_WEBHOOK_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-Byte Bun Admin <admin@bytebuntech.com>}
+      # Lead emails (booking confirmation, reminder, reschedule/cancel). See .env.example.
+      LEADS_MAIL_FROM: ${LEADS_MAIL_FROM:-Byte Bun Tech <admin@bytebuntech.com>}
+      LEADS_REPLY_TO: ${LEADS_REPLY_TO:-}
+      SITE_URL: ${SITE_URL:-http://localhost:5173}
+      CALL_MEETING_URL: ${CALL_MEETING_URL:-}
+      # Every email goes to this inbox instead of its real recipients (development only).
+      TESTING_EMAIL_ADDRESS: ${TESTING_EMAIL_ADDRESS:-}
       CHECKPOINT_DISABLE: "1" # no Prisma CLI telemetry/update checks
     ports:
       - "127.0.0.1:${API_PORT:-4000}:${API_PORT:-4000}"
@@ -75,6 +94,8 @@ services:
     environment:
       VITE_API_PROXY_TARGET: http://api:${API_PORT:-4000}
       SITE_URL: ${SITE_URL:-http://localhost:5173}
+      # Dev server only (vite.config.js): which path serves the admin sign-in page.
+      LOGIN_PATH: ${LOGIN_PATH:-/bb-admin-portal}
     ports:
       - "127.0.0.1:${WEB_PORT:-5173}:5173"
     volumes:

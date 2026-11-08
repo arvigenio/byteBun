@@ -31,6 +31,9 @@ model Lead {
   source       String   @default("website") @db.VarChar(50)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   status       String   @default("new") @db.VarChar(30)
+  // Random value behind the lead's reschedule/cancel link (src/booking/manage-link.ts). The link is
+  // signed with a server-only key, so this alone can't make a working link. A new value revokes old links.
+  manageNonce  String?  @map("manage_nonce") @db.Char(32)
   booking      Booking?
 
   @@index([createdAt], map: "ix_leads_created_at")
@@ -50,6 +53,132 @@ model Booking {
   // The visitor's time zone when they booked (IANA name, e.g. "America/New_York").
   timeZone  String?  @map("time_zone") @db.VarChar(64)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Lead emails (src/leads/lead-emails.ts): when the confirmation went out, when the reminder
+  // is due (24 h before, or 2 h before for short-notice bookings) and when it went out.
+  confirmationSentAt DateTime? @map("confirmation_sent_at") @db.Timestamptz(3)
+  reminderAt         DateTime? @map("reminder_at") @db.Timestamptz(3)
+  reminderSentAt     DateTime? @map("reminder_sent_at") @db.Timestamptz(3)
+  // Bumped on every reschedule, so calendar apps update the event instead of adding a copy.
+  sequence           Int       @default(0)
 
+  @@index([reminderAt], map: "ix_bookings_reminder_at")
   @@map("bookings")
+}
+
+// ---- Admin sign-in (Better Auth, src/auth/auth.ts) ----
+// Field names are what Better Auth expects; columns are snake_case like the tables above.
+// There is no sign-up: admins are created by `npm run seed:admins`. Sign-in is passwordless
+// (email code + authenticator app), so no password is ever stored.
+
+model User {
+  id               String      @id
+  name             String
+  email            String      @unique
+  emailVerified    Boolean     @default(false) @map("email_verified")
+  image            String?
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  twoFactorEnabled Boolean?    @default(false) @map("two_factor_enabled")
+  // Admin plugin fields.
+  role             String?
+  banned           Boolean?    @default(false)
+  banReason        String?     @map("ban_reason")
+  banExpires       DateTime?   @map("ban_expires") @db.Timestamptz(3)
+  sessions         Session[]
+  accounts         Account[]
+  twoFactors       TwoFactor[]
+
+  @@map("auth_users")
+}
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime @map("expires_at") @db.Timestamptz(3)
+  token                String   @unique
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  ipAddress            String?  @map("ip_address")
+  userAgent            String?  @map("user_agent")
+  userId               String   @map("user_id")
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatedBy       String?  @map("impersonated_by")
+  // True only for sessions created by a successful authenticator/backup-code check
+  // (set in src/auth/auth.ts). A session from the email code alone stays false and can only
+  // finish the second step.
+  secondFactorVerified Boolean? @default(false) @map("second_factor_verified")
+
+  @@index([userId], map: "ix_auth_sessions_user_id")
+  @@map("auth_sessions")
+}
+
+// Required by Better Auth's core. Stays empty for our admins (no passwords, no social logins).
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId], map: "ix_auth_accounts_user_id")
+  @@map("auth_accounts")
+}
+
+// Email sign-in codes (hashed) and pending second-step challenges.
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([identifier], map: "ix_auth_verifications_identifier")
+  @@map("auth_verifications")
+}
+
+// Authenticator secret and backup codes (both encrypted with BETTER_AUTH_SECRET).
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String    @map("backup_codes")
+  userId                  String    @map("user_id")
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0) @map("failed_verification_count")
+  lockedUntil             DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  @@index([secret], map: "ix_auth_two_factors_secret")
+  @@index([userId], map: "ix_auth_two_factors_user_id")
+  @@map("auth_two_factors")
+}
+
+// Better Auth's per-IP rate limits (rateLimit.storage = "database").
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("auth_rate_limits")
+}
+
+// Fixed-window counters for our own limits: alert throttling and codes sent per email
+// (src/auth/security-counter.ts). Keys look like "alert:<event>:<email>" or "otp-send:<email>".
+model SecurityCounter {
+  key            String   @id @db.VarChar(400)
+  windowStart    DateTime @map("window_start") @db.Timestamptz(3)
+  count          Int
+  // Events suppressed in the window before this one (reported with the next alert).
+  prevSuppressed Int      @default(0) @map("prev_suppressed")
+
+  @@map("security_counters")
 }

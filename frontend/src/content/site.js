@@ -444,4 +444,51 @@ export const site = {
       stayed: 'Take your time. Use the button whenever you are ready.',
     },
   },
+
+  // The lead's private /manage-booking page (the Reschedule / Cancel link in their emails).
+  // {firstName} and {when} are filled in by the page.
+  manageBooking: {
+    pageTitle: 'Manage your call | Byte Bun Tech',
+    backLabel: 'Back to the website',
+    eyebrow: 'Your free audit call',
+    loading: 'Loading your booking…',
+    greeting: 'Hi {firstName}, here is your call',
+    noCallTitle: 'Hi {firstName}, you have no call booked',
+    noCallText: 'Pick a time that suits you and we will send a new invite to your email.',
+    pastTitle: 'Hi {firstName}, this call has already started',
+    pastText: 'It can no longer be changed here. Need another one? Reply to any of our emails and we will set it up.',
+    current: '{when}',
+    emailNote: 'We email you a confirmation and an updated calendar invite after every change.',
+    rescheduleLabel: 'Pick a new time',
+    bookLabel: 'Book a new time',
+    cancelLabel: 'Cancel my call',
+    reschedule: {
+      title: 'Choose a new time',
+      subtitle: 'A 30-minute video call. Times are shown in your time zone.',
+      currentLabel: 'Your current time:',
+      submitLabel: 'Move my call',
+      bookLabel: 'Book this time',
+      backLabel: 'Keep my current time',
+      backNoCallLabel: 'Back',
+    },
+    confirmCancel: {
+      title: 'Cancel this call?',
+      text: 'The time will be released for someone else. You can book a new one from this page whenever you are ready.',
+      confirmLabel: 'Yes, cancel the call',
+      keepLabel: 'No, keep it',
+    },
+    sendingLabel: 'Saving…',
+    done: {
+      rescheduled: 'Done! Your call has been moved. Check your email for the updated invite.',
+      booked: 'Done! Your call is booked. Check your email for the invite.',
+      cancelled: 'Your call is cancelled. We have emailed you a confirmation.',
+    },
+    invalid: {
+      title: 'This link is not valid any more',
+      text: 'Please use the link in your latest email from us, or simply reply to that email and we will help you.',
+      homeLabel: 'Go to the website',
+    },
+    loadError: 'We could not load your booking.',
+    retry: 'Try again',
+  },
 };

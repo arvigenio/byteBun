@@ -31,6 +31,23 @@ services:
       LEADS_RATE_LIMIT_WINDOW_MINUTES: ${LEADS_RATE_LIMIT_WINDOW_MINUTES:-15}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+      # Admin sign-in (see README "Admin sign-in")
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set BETTER_AUTH_URL in .env}
+      LOGIN_PATH: ${LOGIN_PATH:?Set LOGIN_PATH in .env}
+      ALERT_EMAILS: ${ALERT_EMAILS:?Set ALERT_EMAILS in .env}
+      SECURITY_ALERT_WEBHOOK_URL: ${SECURITY_ALERT_WEBHOOK_URL:-}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST in .env}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:?Set SMTP_USER in .env}
+      SMTP_PASS: ${SMTP_PASS:?Set SMTP_PASS in .env}
+      MAIL_FROM: ${MAIL_FROM:-Byte Bun Admin <admin@bytebuntech.com>}
+      LEADS_MAIL_FROM: ${LEADS_MAIL_FROM:-Byte Bun Tech <admin@bytebuntech.com>}
+      LEADS_REPLY_TO: ${LEADS_REPLY_TO:-}
+      # Public site URL: the reschedule/cancel links in lead emails point here.
+      SITE_URL: ${SITE_URL:?Set SITE_URL in .env}
+      CALL_MEETING_URL: ${CALL_MEETING_URL:-}
+      # TESTING_EMAIL_ADDRESS is deliberately not passed: production always emails real recipients.
     ports:
       - "127.0.0.1:${APP_PORT:-4000}:4000"
     depends_on:

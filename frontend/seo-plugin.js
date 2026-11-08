@@ -67,14 +67,15 @@ function headTags() {
   ];
 }
 
-const robots = () => `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${siteUrl()}/sitemap.xml\n`;
+const robots = () => `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /manage-booking\n\nSitemap: ${siteUrl()}/sitemap.xml\n`;
 const sitemap = () =>
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl()}/</loc>\n    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>\n  </url>\n</urlset>\n`;
 
 export function seoPlugin() {
   return {
     name: 'bytebun-seo',
-    transformIndexHtml: () => headTags(),
+    // Public pages only: the admin page (admin.html) gets no SEO tags, canonical or JSON-LD.
+    transformIndexHtml: (html, ctx) => (ctx?.filename?.endsWith('admin.html') || html.includes('/src/admin/main.jsx') ? html : headTags()),
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (req.url === '/robots.txt') return res.setHeader('content-type', 'text/plain').end(robots());

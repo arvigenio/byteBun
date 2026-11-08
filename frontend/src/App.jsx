@@ -3,17 +3,25 @@ import { useLenis } from 'lenis/react';
 import { SmoothScroll } from './components/SmoothScroll.jsx';
 import { HomePage } from './pages/HomePage.jsx';
 import { GetStartedPage } from './pages/GetStartedPage.jsx';
+import { ManageBookingPage } from './pages/ManageBookingPage.jsx';
 import { routes, usePathname } from './lib/router.js';
 
-// Two pages: the landing page and the lead page. Any unknown path shows the landing page.
+const pages = {
+  [routes.getStarted]: GetStartedPage,
+  [routes.manageBooking]: ManageBookingPage,
+};
+
+// The landing page, the lead page, and the lead's private manage-booking page.
+// Any unknown path shows the landing page.
 // <head> tags (title, meta, JSON-LD) are injected at build time by seo-plugin.js, so they are in
 // the static HTML for crawlers and link previews that don't run JavaScript.
 export default function App() {
   const pathname = usePathname().replace(/\/+$/, '') || routes.home;
+  const Page = pages[pathname] ?? HomePage;
   return (
     <SmoothScroll>
       <ScrollResetOnNavigate pathname={pathname} />
-      {pathname === routes.getStarted ? <GetStartedPage /> : <HomePage />}
+      <Page />
     </SmoothScroll>
   );
 }

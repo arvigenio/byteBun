@@ -1,11 +1,14 @@
 import { useSyncExternalStore } from 'react';
 
-// A tiny History API router: the site has two pages, so a routing library would be overkill.
+// A tiny History API router: the site has a handful of pages, so a routing library would be overkill.
 // Production serves index.html for every non-API path (backend/src/web/static-site.ts) and Vite does
 // the same in development, so /get-started works on a fresh load too.
 export const routes = {
   home: '/',
   getStarted: '/get-started',
+  // The lead's private reschedule/cancel page, linked from their emails (MANAGE_PATH in
+  // backend/src/booking/manage-link.ts).
+  manageBooking: '/manage-booking',
 };
 
 // Every lead button links here; `from` is saved with the lead (see store/leadFormSlice.js).

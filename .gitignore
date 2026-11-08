@@ -16,3 +16,9 @@ dist/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# Database dumps (scripts/deploy.sh, docs/DEPLOY-VPS.md)
+backups/
+
+# Backend test build output
+dist-test/

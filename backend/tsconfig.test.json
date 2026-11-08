@@ -1,0 +1,6 @@
+{
+  // Tests: compiles src + test to dist-test/, run with node --test (npm test).
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "rootDir": ".", "outDir": "./dist-test", "sourceMap": false },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -5,6 +5,9 @@ import { ApiError } from '../common/api-error';
 import { PrismaService } from '../database/prisma.service';
 import { LeadWebhookService } from '../integrations/lead-webhook.service';
 import { logger } from '../logging/logger';
+import { ManageLinks } from '../booking/manage-link';
+import { AdminEvents } from '../realtime/admin-events';
+import { LeadEmailsService, reminderAtFor } from './lead-emails';
 import { OTHER_BUSINESS_TYPE, type LeadInput } from './lead.schema';
 import { featureLabel, goalLabel, OTHER_GOAL } from './lead-options';
 
@@ -75,6 +78,9 @@ export class LeadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhook: LeadWebhookService,
+    private readonly emails: LeadEmailsService,
+    private readonly links: ManageLinks,
+    private readonly events: AdminEvents,
   ) {}
 
   /** Saves a lead and its booked call. Returns the new lead id (none for honeypot hits). */
@@ -126,14 +132,22 @@ export class LeadsService {
             features: JSON.stringify([...new Set(data.features)]),
             message: data.message ?? null,
             source: data.source || 'website',
-            booking: { create: { startsAt: data.meetingAt, timeZone: data.timeZone ?? null } },
+            // Secret behind the lead's reschedule/cancel link (booking/manage-link.ts).
+            manageNonce: this.links.newNonce(),
+            booking: { create: { startsAt: data.meetingAt, timeZone: data.timeZone ?? null, reminderAt: reminderAtFor(data.meetingAt) } },
           },
           select: leadSelect,
         });
       });
 
       logger.info({ leadId: lead.id, ip }, 'Lead saved');
-      this.webhook.notifyLeadCreated(toSavedLead(lead)); // fire and forget; never affects the response
+      // All fire and forget; none of them affects the response.
+      this.webhook.notifyLeadCreated(toSavedLead(lead));
+      this.emails.newLead(lead.id); // confirmation to the lead, notification to both admins
+      this.events.leadCreated(
+        { id: lead.id, firstName: lead.firstName, lastName: lead.lastName, businessName: lead.businessName },
+        lead.booking?.startsAt ?? null,
+      ); // clears cached lists, live update + toast in the admin site
       return { id: lead.id };
     } catch (err) {
       // Unique index on bookings.starts_at: someone else booked this slot a moment earlier.
