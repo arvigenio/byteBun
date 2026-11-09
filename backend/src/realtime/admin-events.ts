@@ -47,6 +47,11 @@ export class AdminEvents {
     this.realtime.emit('prospects.updated', payload);
   }
 
+  /** Prospecting: saved prospects or their groups changed (the Saved tab reloads). */
+  savedProspectsChanged() {
+    this.realtime.emit('prospects.saved.changed', {});
+  }
+
   bookingChanged(change: BookingChange) {
     this.cache.invalidate('bookings', 'slots', 'leads'); // the leads list shows call times
     this.realtime.emit('booking.changed', change);

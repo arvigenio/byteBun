@@ -15,6 +15,7 @@ import { FinalCta } from '../components/FinalCta.jsx';
 import { SeoBlock } from '../components/SeoBlock.jsx';
 import { Footer } from '../components/Footer.jsx';
 import { StickyBar } from '../components/StickyBar.jsx';
+import { ChatWidget } from '../components/ChatWidget.jsx';
 import { useScrollReveal } from '../hooks/useScrollReveal.js';
 
 // The landing page. Order is a funnel: what we build -> the free offer -> the problem ->
@@ -44,6 +45,7 @@ export function HomePage() {
       </main>
       <Footer />
       <StickyBar />
+      <ChatWidget />
     </>
   );
 }

@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 import { fetchLead, refreshAfterEvent } from '../../store/adminDataSlices.js';
 import { prospectUpdated } from '../../store/adminProspectsSlice.js';
+import { refreshSavedProspects } from '../../store/adminSavedProspectsSlice.js';
 
 // Live admin updates (backend/src/realtime/admin-realtime.gateway.ts, Socket.IO at /api/realtime).
 // The browser's session cookie authenticates the connection. On every event the lists, the
@@ -60,6 +61,8 @@ export function useAdminRealtime(me) {
     socket.on('lead.updated', (e) => dispatch(refreshAfterEvent(e)));
     // Prospecting: a website checkup finished (no toast; the row updates and re-ranks).
     socket.on('prospects.updated', (e) => dispatch(prospectUpdated(e)));
+    // Saved prospects or groups changed (by anyone): the Saved tab reloads what it has loaded.
+    socket.on('prospects.saved.changed', () => dispatch(refreshSavedProspects()));
 
     return () => {
       socket.removeAllListeners();

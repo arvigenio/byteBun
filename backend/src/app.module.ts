@@ -5,6 +5,7 @@ import { AdminModule } from './admin/admin.module';
 import { AdminSessionGuard } from './auth/admin-session';
 import { AuthModule } from './auth/auth.module';
 import { BookingModule } from './booking/booking.module';
+import { ChatModule } from './chat/chat.module';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 import { ApiThrottlerGuard, rateLimitOptions } from './common/rate-limit';
 import { APP_CONFIG, type AppConfig } from './config/config';
@@ -31,6 +32,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     LeadsModule,
     AdminModule,
     ProspectsModule,
+    ChatModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ApiThrottlerGuard },

@@ -64,7 +64,7 @@ export async function startApp(): Promise<TestApp> {
 export async function resetState(prisma: PrismaClient) {
   await settle();
   await prisma.$executeRawUnsafe(
-    'TRUNCATE auth_sessions, auth_verifications, auth_rate_limits, security_counters, auth_two_factors, auth_accounts, bookings, leads RESTART IDENTITY CASCADE',
+    'TRUNCATE auth_sessions, auth_verifications, auth_rate_limits, security_counters, auth_two_factors, auth_accounts, bookings, leads, saved_prospects, prospect_groups RESTART IDENTITY CASCADE',
   );
   await prisma.$executeRawUnsafe(`DELETE FROM auth_users WHERE email NOT IN ('${JOSUE}', '${ARVI}')`);
   await prisma.user.updateMany({ data: { twoFactorEnabled: false, banned: false, role: 'admin' } });

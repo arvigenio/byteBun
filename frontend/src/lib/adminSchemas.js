@@ -91,3 +91,16 @@ export const prospectSearchSchema = yup.object({
     .max(120, 'Location is too long (120 characters max).')
     .matches(PROSPECT_TEXT, 'Use letters, numbers and spaces only.'),
 });
+
+// Saved prospects. Mirror groupSchema / updateSchema in backend/src/prospects/saved-prospects.controller.ts.
+export const prospectGroupSchema = yup.object({
+  name: yup
+    .string()
+    .trim()
+    .required('Enter a name for the group.')
+    .max(80, 'Group name is too long (80 characters max).')
+    .matches(/^[^<>]*$/, 'Leave out < and >.'),
+});
+export const savedProspectNoteSchema = yup.object({
+  note: yup.string().trim().max(2000, 'Note is too long (2000 characters max).'),
+});

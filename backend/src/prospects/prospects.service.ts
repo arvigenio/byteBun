@@ -1,10 +1,10 @@
 // Prospecting: find businesses by industry + location and rank them by how likely they are to
-// sign up. Nothing is saved to the database: a search's results live in this process's memory
-// for a short time (so a repeat search is instant, and website checkups can fill in live), then
-// they are gone.
+// sign up. A search's results live in this process's memory for a short time (so a repeat search
+// is instant, and website checkups can fill in live), then they are gone. Admins can keep any of
+// them in the database (saved-prospects.service.ts); results show which ones are saved.
 import crypto from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { hitCounter } from '../auth/security-counter';
 import { ApiError } from '../common/api-error';
 import { APP_CONFIG, type AppConfig } from '../config/config';
@@ -42,6 +42,36 @@ interface Search {
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
+export type PresentedProspect = ReturnType<ProspectsService['present']>;
+/** Already saved (saved-prospects.service.ts): its saved id and group. */
+type SavedMark = { id: number; groupId: number | null };
+
+/** The saved_prospects columns a search result fills in (all but group, note, who saved it). */
+export function snapshotOf(p: PresentedProspect) {
+  return {
+    name: p.name.slice(0, 200),
+    category: p.category,
+    address: p.address,
+    city: p.city,
+    country: p.country,
+    latitude: p.lat,
+    longitude: p.lng,
+    phone: p.phone,
+    email: p.email,
+    website: p.website,
+    mapsUrl: p.mapsUrl?.slice(0, 1000) ?? null,
+    rating: p.rating,
+    reviewCount: p.reviewCount,
+    score: p.score,
+    tier: p.tier,
+    websiteKind: p.websiteKind,
+    socials: p.socials as unknown as Prisma.InputJsonValue,
+    reasons: p.reasons as unknown as Prisma.InputJsonValue,
+    pitch: p.pitch as unknown as Prisma.InputJsonValue,
+    checkup: p.checkup ? (p.checkup as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+  };
+}
+
 @Injectable()
 export class ProspectsService {
   private readonly log = new Logger('Prospects');
@@ -73,7 +103,7 @@ export class ProspectsService {
 
   // ---------------------------------------------------------------- results
 
-  private present(item: Item) {
+  present(item: Item) {
     const { facts: f, checkup } = item;
     const { score, tier, reasons } = scoreProspect(f, checkup);
     const socials = mergeSocials(f.socials, checkup?.socials ?? []);
@@ -105,10 +135,21 @@ export class ProspectsService {
     };
   }
 
+  /** Which of these businesses are saved, by external id. */
+  private async savedMarks(items: Item[]): Promise<Map<string, SavedMark>> {
+    if (!items.length) return new Map();
+    const rows = await this.prisma.savedProspect.findMany({
+      where: { externalId: { in: items.map((i) => i.facts.externalId) } },
+      select: { id: true, externalId: true, groupId: true },
+    });
+    return new Map(rows.map((r) => [r.externalId, { id: r.id, groupId: r.groupId }]));
+  }
+
   /** Best chance of signing up first; ties go to the busier business (more reviews). */
-  private ranked(search: Search) {
+  private async ranked(search: Search) {
+    const saved = await this.savedMarks(search.items);
     const items = search.items
-      .map((i) => this.present(i))
+      .map((i) => ({ ...this.present(i), saved: saved.get(i.facts.externalId) ?? null }))
       .sort((a, b) => b.score - a.score || (b.reviewCount ?? -1) - (a.reviewCount ?? -1) || a.name.localeCompare(b.name))
       .map((p, i) => ({ ...p, rank: i + 1 }));
     const tiers = { hot: 0, warm: 0, cold: 0 };
@@ -143,7 +184,7 @@ export class ProspectsService {
     this.prune();
     if (!input.refresh) {
       const recent = [...this.searches.values()].reverse().find((s) => s.key === key);
-      if (recent) return { ...this.ranked(recent), reused: true };
+      if (recent) return { ...(await this.ranked(recent)), reused: true };
     }
 
     if (!this.cfg.rateLimitsDisabled) {
@@ -170,12 +211,21 @@ export class ProspectsService {
     this.searches.set(search.id, search);
     this.log.log(`${actor.email} searched "${industry}" in "${location}": ${unique.length} businesses`);
     this.runCheckups(search, search.items.filter((i) => i.checking));
-    return { ...this.ranked(search), reused: false };
+    return { ...(await this.ranked(search)), reused: false };
   }
 
   /** The current results (with any checkups finished since). */
   get(searchId: string) {
     return this.ranked(this.find(searchId));
+  }
+
+  /** Results to save (saved-prospects.service.ts): the server's own copy, never the browser's. */
+  itemsForSaving(searchId: string, itemIds: number[]) {
+    const search = this.find(searchId);
+    const wanted = new Set(itemIds);
+    const items = search.items.filter((i) => wanted.has(i.id)).map((i) => ({ externalId: i.facts.externalId, item: this.present(i) }));
+    if (!items.length) throw new ApiError(404, { error: 'not_found', message: 'Those businesses are not in these results.' });
+    return { search, items };
   }
 
   // ---------------------------------------------------------------- website checkups
@@ -215,5 +265,10 @@ export class ProspectsService {
     } finally {
       item.checking = false;
     }
+    // Already saved: keep the saved copy up to date (score, email, checkup).
+    await this.prisma.savedProspect
+      .updateMany({ where: { externalId: item.facts.externalId }, data: snapshotOf(this.present(item)) })
+      .then(({ count }) => count && this.events.savedProspectsChanged())
+      .catch((err: Error) => this.log.warn(`Could not refresh a saved prospect: ${err.message}`));
   }
 }

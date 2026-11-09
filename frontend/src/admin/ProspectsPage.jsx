@@ -3,128 +3,17 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useAdminForm } from '../hooks/admin/useAdminForm.js';
 import { downloadProspectsCsv, useProspects } from '../hooks/admin/useProspects.js';
 import { prospectSearchSchema } from '../lib/adminSchemas.js';
+import { onRouteLinkClick, usePathname } from '../lib/router.js';
 import { noWebsiteOnlyToggled, prospectSelected, recheckWebsite, searchProspects, sortChanged, tierToggled } from '../store/adminProspectsSlice.js';
 import { PageTitle } from './AdminLayout.jsx';
 import { AdminButton, Field, Notice, Panel, SelectInput, Spinner, TextInput } from './ui.jsx';
+import { Chance, EmailCell, ExternalLink, prospectMailto, SocialCell, TIERS, WebsiteCell } from './prospectCells.jsx';
+import { BulkSave, SaveCell, SavedTab, useLoadProspectGroups } from './SavedProspects.jsx';
 
 // Leaflet is only downloaded when this page opens.
 const ProspectMap = lazy(() => import('./ProspectMap.jsx'));
 
-// Mirrors TIER_COLORS in ProspectMap.jsx.
-const TIERS = {
-  hot: { label: 'Hot', dot: 'bg-bun-orange', chip: 'bg-bun-orange text-midnight-plum', bar: 'bg-bun-orange' },
-  warm: { label: 'Warm', dot: 'bg-soft-violet', chip: 'bg-soft-violet text-cream-dough', bar: 'bg-soft-violet' },
-  cold: { label: 'Cold', dot: 'bg-[#A79BC0]', chip: 'bg-[#A79BC0] text-midnight-plum', bar: 'bg-[#A79BC0]' },
-};
 const INDUSTRIES = ['Dentist', 'Dental clinic', 'Veterinary clinic', 'Medical clinic', 'Dermatologist', 'Hair salon', 'Barbershop', 'Beauty salon', 'Nail salon', 'Spa', 'Gym', 'Physiotherapy', 'Chiropractor', 'Optometrist', 'Restaurant', 'Cafe', 'Bakery', 'Law firm', 'Accountant', 'Real estate agency', 'Car repair', 'Plumber', 'Electrician', 'Tutoring center', 'Daycare'];
-const NETWORK_LABELS = { facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube', x: 'X' };
-
-const hostOf = (url) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-};
-
-function ExternalLink({ href, children, className = '' }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => e.stopPropagation()} className={`font-semibold text-soft-violet underline-offset-2 hover:underline ${className}`}>
-      {children}
-    </a>
-  );
-}
-
-function Chance({ p }) {
-  const t = TIERS[p.tier];
-  return (
-    <div className="w-28">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${t.chip}`}>{t.label}</span>
-        <span className="text-xs font-bold text-midnight-plum">{p.score}</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-lavender-mist" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.score} aria-label="Chance to sign up">
-        <div className={`h-full rounded-full ${t.bar}`} style={{ width: `${Math.max(4, p.score)}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function WebsiteCell({ p }) {
-  if (p.website) {
-    return (
-      <div className="max-w-44">
-        <ExternalLink href={p.website} className="block truncate">
-          {hostOf(p.website)}
-        </ExternalLink>
-        <div className="mt-0.5 text-xs text-muted">
-          {p.checkingWebsite ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-3 animate-spin rounded-full border-2 border-soft-violet border-t-transparent" aria-hidden="true" /> Checking…
-            </span>
-          ) : p.checkup ? (
-            p.checkup.reachable ? [p.checkup.https ? 'Secure' : 'Not secure', p.checkup.mobileFriendly ? 'mobile-ready' : 'not mobile-ready', p.checkup.platform].filter(Boolean).join(' · ') : "Doesn't load"
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-  return <span className="text-sm font-semibold text-danger">No website</span>;
-}
-
-/** mailto: link with a short, friendly first email (the admin edits it before sending). */
-export function prospectMailto(p) {
-  const who = p.category ? `${p.category.toLowerCase()}s` : 'local businesses';
-  const subject = `A quick idea for ${p.name}`;
-  const body = [
-    `Hi ${p.name} team,`,
-    '',
-    `I'm reaching out from Byte Bun Tech. We help ${who} get more bookings with modern websites, online booking, and automatic follow-up, with free domain and hosting.`,
-    '',
-    'Would you be open to a free 30-minute consultation this week? We will look at how customers find and book you today, and share a few ideas you can use either way.',
-    '',
-    'Best regards,',
-    'The Byte Bun Tech team',
-    'https://bytebuntech.com',
-  ].join('\n');
-  return `mailto:${encodeURIComponent(p.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
-function EmailCell({ p }) {
-  if (!p.email) {
-    return p.checkingWebsite ? <span className="text-xs text-muted">Looking…</span> : <span className="text-muted">—</span>;
-  }
-  return (
-    <div className="max-w-48">
-      <a
-        href={prospectMailto(p)}
-        onClick={(e) => e.stopPropagation()}
-        title={`Email ${p.email}`}
-        className="inline-flex min-h-8 items-center gap-1.5 rounded-btn border-2 border-transparent bg-byte-purple px-3 py-1 text-xs font-semibold text-cream-dough hover:bg-byte-purple-hover"
-      >
-        <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4 6h16v12H4z" />
-          <path d="M4 7l8 6 8-6" />
-        </svg>
-        Email
-      </a>
-      <div className="mt-1 truncate text-xs text-muted">{p.email}</div>
-    </div>
-  );
-}
-
-function SocialCell({ p }) {
-  if (!p.socials.length) return <span className="text-muted">—</span>;
-  return (
-    <div className="flex max-w-40 flex-wrap gap-x-2 gap-y-1 text-sm">
-      {p.socials.map((s) => (
-        <ExternalLink key={s.network} href={s.url}>
-          {NETWORK_LABELS[s.network] ?? s.network}
-        </ExternalLink>
-      ))}
-    </div>
-  );
-}
 
 function Details({ p, searchId }) {
   const dispatch = useDispatch();
@@ -194,7 +83,42 @@ function Details({ p, searchId }) {
   );
 }
 
+const TABS = [
+  { href: '/admin/prospects', label: 'Search' },
+  { href: '/admin/prospects/saved', label: 'Saved' },
+];
+
+// Prospecting: the Search tab (find and rank businesses) and the Saved tab (groups).
 export function ProspectsPage() {
+  const savedTab = usePathname().replace(/\/+$/, '').startsWith('/admin/prospects/saved');
+  const total = useSelector((s) => s.adminSavedProspects.total);
+  useLoadProspectGroups();
+  return (
+    <>
+      <PageTitle title="Prospecting">Find local businesses by industry and location, ranked by how likely they are to sign up, and keep the best ones in groups.</PageTitle>
+      <nav className="mb-5 flex gap-1 border-b border-line" aria-label="Prospecting">
+        {TABS.map((t) => {
+          const active = (t.href === '/admin/prospects/saved') === savedTab;
+          return (
+            <a
+              key={t.href}
+              href={t.href}
+              onClick={onRouteLinkClick}
+              aria-current={active ? 'page' : undefined}
+              className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold ${active ? 'border-byte-purple text-byte-purple' : 'border-transparent text-muted hover:text-midnight-plum'}`}
+            >
+              {t.label}
+              {t.label === 'Saved' && total > 0 && <span className="ml-1.5 rounded-full bg-lavender-mist px-2 py-0.5 text-xs text-byte-purple">{total}</span>}
+            </a>
+          );
+        })}
+      </nav>
+      {savedTab ? <SavedTab /> : <SearchTab />}
+    </>
+  );
+}
+
+function SearchTab() {
   const dispatch = useDispatch();
   const { meta, query, search, visible, items, status, error, fieldErrors, reused, sort, tiers, noWebsiteOnly, selectedId } = useProspects();
   const { register, handleSubmit, setError, formState } = useAdminForm(prospectSearchSchema, query);
@@ -216,8 +140,6 @@ export function ProspectsPage() {
 
   return (
     <>
-      <PageTitle title="Prospecting">Find local businesses by industry and location, ranked by how likely they are to sign up.</PageTitle>
-
       <Panel className="mb-5">
         <form onSubmit={onSearch(false)} className="grid items-start gap-x-4 desktop:grid-cols-[1fr_1fr_auto]" role="search" noValidate>
           <Field label="Industry" id="industry" error={errors.industry?.message}>
@@ -286,6 +208,7 @@ export function ProspectsPage() {
                 {meta?.hasReviews && <option value="reviews">Most reviews</option>}
                 <option value="name">Name</option>
               </SelectInput>
+              <BulkSave searchId={search.id} items={visible} />
               <AdminButton variant="outline" className="min-h-10 py-2" onClick={() => downloadProspectsCsv(search, visible)} disabled={!visible.length}>
                 Download CSV
               </AdminButton>
@@ -314,6 +237,7 @@ export function ProspectsPage() {
                 <thead className="border-b border-line text-xs tracking-wider text-soft-violet uppercase">
                   <tr>
                     <th className="px-4 py-3">Rank</th>
+                    <th className="px-4 py-3">Save</th>
                     <th className="px-4 py-3">Business</th>
                     <th className="px-4 py-3">Chance to sign up</th>
                     <th className="px-4 py-3">Website</th>
@@ -337,6 +261,9 @@ export function ProspectsPage() {
                       >
                         <td className="px-4 py-3">
                           <span className={`inline-flex size-7 items-center justify-center rounded-full text-xs font-bold ${TIERS[p.tier].chip}`}>{p.rank}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <SaveCell p={p} searchId={search.id} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="font-semibold text-midnight-plum">{p.name}</div>
@@ -371,7 +298,7 @@ export function ProspectsPage() {
                       </tr>,
                       open && (
                         <tr key={`${p.id}-details`} className="border-b border-line/70">
-                          <td colSpan={meta?.hasReviews ? 9 : 8} className="p-0">
+                          <td colSpan={meta?.hasReviews ? 10 : 9} className="p-0">
                             <Details p={p} searchId={search.id} />
                           </td>
                         </tr>
@@ -383,7 +310,7 @@ export function ProspectsPage() {
             )}
           </Panel>
           <p className="mt-3 text-xs text-muted">
-            The chance score (0–100) is an estimate from what's public: website, reviews and contact details. Hot is 70 and up, Warm 45–69. Results are not saved and expire after 30 minutes.
+            The chance score (0–100) is an estimate from what's public: website, reviews and contact details. Hot is 70 and up, Warm 45–69. Results expire after 30 minutes unless you save them.
           </p>
         </>
       )}

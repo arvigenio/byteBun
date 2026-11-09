@@ -1,5 +1,5 @@
 // Prospecting API (admin). Every route is under /api/admin, so AdminSessionGuard protects it.
-// Nothing here is saved: results live in memory for 30 minutes (prospects.service.ts).
+// Results live in memory for 30 minutes (prospects.service.ts); saving: saved-prospects.controller.ts.
 import { Body, Controller, Get, Header, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import * as yup from 'yup';

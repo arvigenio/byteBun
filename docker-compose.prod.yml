@@ -58,6 +58,11 @@ services:
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       PROSPECTS_MAX_RESULTS: ${PROSPECTS_MAX_RESULTS:-60}
       PROSPECTS_WEBSITE_CHECKS: ${PROSPECTS_WEBSITE_CHECKS:-true}
+      # Website chatbot (Claude). Empty key = the chat says it is offline.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-5-5}
+      CHAT_RATE_LIMIT_MAX: ${CHAT_RATE_LIMIT_MAX:-40}
+      CHAT_RATE_LIMIT_WINDOW_MINUTES: ${CHAT_RATE_LIMIT_WINDOW_MINUTES:-15}
       # TESTING_EMAIL_ADDRESS is deliberately not passed: production always emails real recipients.
     ports:
       - "127.0.0.1:${APP_PORT:-4000}:4000"

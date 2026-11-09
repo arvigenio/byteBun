@@ -1,4 +1,4 @@
-// Prospecting: search by industry + location, ranked by chance of signing up; nothing saved.
+// Prospecting: search by industry + location, ranked by chance of signing up; saving into groups.
 import './env';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
@@ -85,9 +85,64 @@ describe('prospecting API', () => {
     assert.ok([200, 502].includes((await b.get('/api/admin/prospects/tiles/2/1/1.png')).status));
   });
 
-  it('saves nothing to the database', async () => {
-    const tables = await t.prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'prospect%'`;
-    assert.equal(Number(tables[0]!.n), 0);
+  it('saves chosen results into groups, admin-only', async () => {
+    assert.equal((await request(t.server).get('/api/admin/prospects/saved')).status, 401);
+    assert.equal((await request(t.server).post('/api/admin/prospects/groups').send({ name: 'x' })).status, 401);
+    const b = browser(t.server);
+    await enroll(b, JOSUE);
+
+    // Nothing is kept until an admin saves it.
+    const res = await b.post('/api/admin/prospects/search', { industry: 'Dentist', location: 'Makati' });
+    assert.ok(res.body.items.every((p: any) => p.saved === null));
+    assert.deepEqual((await b.get('/api/admin/prospects/groups')).body, { groups: [], total: 0, ungrouped: 0 });
+    const [santos, reyes] = res.body.items;
+
+    const group = await b.post('/api/admin/prospects/groups', { name: '  Makati   dentists ' });
+    assert.equal(group.status, 201, JSON.stringify(group.body));
+    assert.equal(group.body.name, 'Makati dentists');
+    assert.equal((await b.post('/api/admin/prospects/groups', { name: 'makati DENTISTS' })).status, 409, 'names are unique, any case');
+    assert.equal((await b.post('/api/admin/prospects/groups', { name: '' })).status, 400);
+
+    const saved = await b.post('/api/admin/prospects/saved', { searchId: res.body.search.id, itemIds: [santos.id, reyes.id], groupId: group.body.id });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.created, 2);
+    assert.ok(saved.body.saved.every((s: any) => s.groupId === group.body.id));
+
+    // The results now show it; saving again (no group given) refreshes it and keeps its group.
+    const again = await b.get(`/api/admin/prospects/searches/${res.body.search.id}`);
+    assert.equal(again.body.items.find((p: any) => p.id === santos.id).saved.groupId, group.body.id);
+    const resave = await b.post('/api/admin/prospects/saved', { searchId: res.body.search.id, itemIds: [santos.id] });
+    assert.deepEqual([resave.body.created, resave.body.updated, resave.body.saved[0].groupId], [0, 1, group.body.id]);
+
+    const list = await b.get(`/api/admin/prospects/saved?group=${group.body.id}`);
+    assert.deepEqual(list.body.items.map((p: any) => p.name).sort(), ['Reyes Dental Care', 'Santos Family Dental Clinic']);
+    const s = list.body.items.find((p: any) => p.name === 'Santos Family Dental Clinic');
+    assert.equal(s.tier, santos.tier);
+    assert.equal(s.score, santos.score);
+    assert.ok(s.reasons.some((r: any) => r.label === 'No website'), 'the snapshot keeps why it ranked');
+    assert.equal(s.industry, 'Dentist');
+    assert.equal(s.savedBy, JOSUE);
+
+    // Move one out of the group, with a note.
+    const r = list.body.items.find((p: any) => p.name === 'Reyes Dental Care');
+    const moved = await b.patch(`/api/admin/prospects/saved/${r.id}`, { groupId: null, note: '  Call after lunch ' });
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    assert.deepEqual([moved.body.groupId, moved.body.note], [null, 'Call after lunch']);
+    assert.equal((await b.patch(`/api/admin/prospects/saved/${r.id}`, { groupId: 999999 })).status, 400);
+    let groups = (await b.get('/api/admin/prospects/groups')).body;
+    assert.deepEqual([groups.total, groups.ungrouped, groups.groups[0].count], [2, 1, 1]);
+    assert.equal((await b.get('/api/admin/prospects/saved?group=none')).body.items.length, 1);
+    assert.equal((await b.get('/api/admin/prospects/saved?group=abc')).status, 400);
+
+    // Deleting a group keeps its prospects (ungrouped).
+    assert.equal((await b.patch(`/api/admin/prospects/groups/${group.body.id}`, { name: 'Makati – call first' })).status, 200);
+    groups = (await b.delete(`/api/admin/prospects/groups/${group.body.id}`)).body;
+    assert.deepEqual([groups.groups.length, groups.total, groups.ungrouped], [0, 2, 2]);
+
+    assert.equal((await b.delete(`/api/admin/prospects/saved/${r.id}`)).status, 200);
+    assert.equal((await b.delete(`/api/admin/prospects/saved/${r.id}`)).status, 404);
+    assert.equal((await b.post('/api/admin/prospects/saved', { searchId: res.body.search.id, itemIds: [] })).status, 400);
+    assert.equal((await b.post('/api/admin/prospects/saved', { searchId: '00000000-0000-4000-8000-000000000000', itemIds: [1] })).status, 404, 'expired results');
   });
 });
 

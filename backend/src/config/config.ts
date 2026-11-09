@@ -34,6 +34,16 @@ export interface AppConfig {
   mail: MailConfig;
   booking: BookingConfig;
   prospects: ProspectsConfig;
+  chat: ChatConfig;
+}
+
+export interface ChatConfig {
+  /** Anthropic API key for the website chatbot. Empty = the chat says it is offline and links to the lead page. */
+  apiKey: string;
+  /** Claude model the chatbot uses. */
+  model: string;
+  /** Chat messages one visitor (IP) may send per window. */
+  rateLimit: { max: number; windowMs: number };
 }
 
 export interface ProspectsConfig {
@@ -209,6 +219,9 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const prospectSource = (sources.includes(sourceRaw) ? sourceRaw : hereApiKey ? 'here' : geoapifyApiKey ? 'geoapify' : googleApiKey ? 'google' : 'osm') as ProspectsConfig['source'];
   const prospectsFixture = nodeEnv === 'test' ? env.PROSPECTS_FIXTURE_FILE?.trim() || '' : '';
 
+  const chatModel = env.ANTHROPIC_MODEL?.trim() || 'claude-haiku-5-5';
+  if (!/^[a-z0-9][a-z0-9.\-]{1,80}$/i.test(chatModel)) problems.push('ANTHROPIC_MODEL must be a model name like claude-haiku-5-5.');
+
   const config: AppConfig = {
     nodeEnv,
     isProd,
@@ -251,6 +264,15 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       maxResults: int('PROSPECTS_MAX_RESULTS', 60, { min: 5, max: prospectSource === 'google' ? 60 : prospectSource === 'here' ? 100 : 200 }),
       websiteChecks: bool('PROSPECTS_WEBSITE_CHECKS', true),
       fixtureFile: prospectsFixture,
+    },
+    chat: {
+      // Tests never call the real API.
+      apiKey: nodeEnv === 'test' ? '' : env.ANTHROPIC_API_KEY?.trim() || '',
+      model: chatModel,
+      rateLimit: {
+        max: int('CHAT_RATE_LIMIT_MAX', 40, { min: 1 }),
+        windowMs: int('CHAT_RATE_LIMIT_WINDOW_MINUTES', 15, { min: 1 }) * 60_000,
+      },
     },
   };
 

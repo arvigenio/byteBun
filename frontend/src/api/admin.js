@@ -25,10 +25,22 @@ export const revokeSession = (id) => http.post(`/admin/security/sessions/${encod
 export const revokeOtherSessions = () => http.post('/admin/security/sessions/revoke-others', {});
 export const regenerateBackupCodes = (code) => http.post('/admin/security/backup-codes', { code });
 
-// Prospecting (backend/src/prospects/). Nothing is saved: results live on the server for 30 min.
+// Prospecting (backend/src/prospects/). Search results live on the server for 30 min; admins can
+// save any of them, in groups (saved-prospects.controller.ts).
 export const getProspectMeta = (config) => http.get('/admin/prospects/meta', config);
 // Searching can take up to a minute with the free map data, so a longer timeout here.
 export const searchProspects = ({ industry, location, refresh = false }, config) =>
   http.post('/admin/prospects/search', { industry, location, refresh }, { timeout: 150_000, ...config });
 export const getProspectResults = (searchId, config) => http.get(`/admin/prospects/searches/${searchId}`, config);
 export const recheckProspectWebsite = (searchId, itemId) => http.post(`/admin/prospects/searches/${searchId}/items/${itemId}/check-website`, {}, { timeout: 30_000 });
+export const listProspectGroups = (config) => http.get('/admin/prospects/groups', config);
+export const createProspectGroup = (name) => http.post('/admin/prospects/groups', { name });
+export const renameProspectGroup = (id, name) => http.patch(`/admin/prospects/groups/${id}`, { name });
+export const deleteProspectGroup = (id) => http.delete(`/admin/prospects/groups/${id}`);
+/** group: 'all', 'none' (no group) or a group id. */
+export const listSavedProspects = (group, config) => http.get('/admin/prospects/saved', { ...config, params: { group } });
+/** groupId: a group, null for none, or undefined to keep the group of already saved ones. */
+export const saveProspects = ({ searchId, itemIds, groupId }) => http.post('/admin/prospects/saved', { searchId, itemIds, groupId });
+/** Partial: { groupId?, note? } */
+export const updateSavedProspect = (id, fields) => http.patch(`/admin/prospects/saved/${id}`, fields);
+export const removeSavedProspect = (id) => http.delete(`/admin/prospects/saved/${id}`);

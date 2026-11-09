@@ -1,9 +1,11 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import * as adminApi from '../api/admin.js';
+import { removeSavedProspect, saveProspects, updateSavedProspect } from './adminSavedProspectsSlice.js';
 
 // The Prospecting page: one search at a time (industry + location), ranked by the chance of
-// signing up. Nothing is saved; website checkups finish in the background and arrive live
-// (hooks/admin/useAdminRealtime.js -> prospectUpdated).
+// signing up. Website checkups finish in the background and arrive live
+// (hooks/admin/useAdminRealtime.js -> prospectUpdated). Each result's `saved` ({ id, groupId } or
+// null) says whether it is kept (adminSavedProspectsSlice.js).
 const fail = (err) => ({ message: err.message, status: err.status, fields: err.fields ?? {} });
 const thunk = (type, fn, options) =>
   createAsyncThunk(
@@ -74,7 +76,7 @@ const prospects = createSlice({
       if (s.search?.id !== payload.searchId) return;
       const i = s.items.findIndex((p) => p.id === payload.item.id);
       if (i < 0) return;
-      s.items[i] = { ...payload.item, rank: s.items[i].rank };
+      s.items[i] = { ...payload.item, rank: s.items[i].rank, saved: s.items[i].saved };
       rerank(s);
     },
   },
@@ -113,6 +115,22 @@ const prospects = createSlice({
       })
       .addCase(recheckWebsite.rejected, (s) => {
         s.rechecking = null;
+      })
+      // Saving from these results, or changing a saved one: keep the marks in step.
+      .addCase(saveProspects.fulfilled, (s, { payload, meta }) => {
+        if (s.search?.id !== meta.arg.searchId) return;
+        for (const x of payload.saved) {
+          const p = s.items.find((it) => it.id === x.itemId);
+          if (p) p.saved = { id: x.id, groupId: x.groupId };
+        }
+      })
+      .addCase(updateSavedProspect.fulfilled, (s, { payload }) => {
+        const p = s.items.find((it) => it.saved?.id === payload.id);
+        if (p) p.saved = { id: payload.id, groupId: payload.groupId };
+      })
+      .addCase(removeSavedProspect.fulfilled, (s, { payload }) => {
+        const p = s.items.find((it) => it.saved?.id === payload.id);
+        if (p) p.saved = null;
       }),
 });
 

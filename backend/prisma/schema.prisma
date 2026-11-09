@@ -65,6 +65,65 @@ model Booking {
   @@map("bookings")
 }
 
+// ---- Prospecting (src/prospects/) ----
+// Search results live in memory for 30 minutes; these are the businesses an admin chose to keep,
+// optionally sorted into groups ("Makati dentists", "Follow up in January", ...).
+
+model ProspectGroup {
+  id        Int             @id @default(autoincrement())
+  name      String          @unique @db.VarChar(80)
+  createdBy String          @map("created_by") @db.VarChar(254)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  prospects SavedProspect[]
+
+  @@map("prospect_groups")
+}
+
+// A snapshot of one business as the search showed it (refreshed when it's saved again, or when
+// its website checkup finishes). One row per business: external_id is the source's place ID.
+model SavedProspect {
+  id           Int            @id @default(autoincrement())
+  externalId   String         @unique @map("external_id") @db.VarChar(200)
+  // Deleting a group keeps its prospects (they become ungrouped).
+  groupId      Int?           @map("group_id")
+  group        ProspectGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  name         String         @db.VarChar(200)
+  category     String?        @db.VarChar(120)
+  address      String?        @db.VarChar(400)
+  city         String?        @db.VarChar(120)
+  country      String?        @db.VarChar(120)
+  latitude     Float
+  longitude    Float
+  phone        String?        @db.VarChar(60)
+  email        String?        @db.VarChar(254)
+  website      String?        @db.VarChar(500)
+  mapsUrl      String?        @map("maps_url") @db.VarChar(1000)
+  rating       Float?
+  reviewCount  Int?           @map("review_count")
+  // Chance to sign up when saved (src/prospects/scoring.ts): 0-100, hot | warm | cold.
+  score        Int
+  tier         String         @db.VarChar(10)
+  // JSON: [{ network, url }], [{ key, label, points }], ["Custom website design", ...], checkup.
+  socials      Json           @default("[]")
+  reasons      Json           @default("[]")
+  pitch        Json           @default("[]")
+  checkup      Json?
+  websiteKind  String         @map("website_kind") @db.VarChar(10)
+  // The search it came from.
+  industry     String         @db.VarChar(80)
+  location     String         @db.VarChar(120)
+  source       String         @db.VarChar(20)
+  note         String?        @db.VarChar(2000)
+  savedBy      String         @map("saved_by") @db.VarChar(254)
+  savedAt      DateTime       @default(now()) @map("saved_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([groupId], map: "ix_saved_prospects_group_id")
+  @@index([savedAt], map: "ix_saved_prospects_saved_at")
+  @@map("saved_prospects")
+}
+
 // ---- Admin sign-in (Better Auth, src/auth/auth.ts) ----
 // Field names are what Better Auth expects; columns are snake_case like the tables above.
 // There is no sign-up: admins are created by `npm run seed:admins`. Sign-in is passwordless

@@ -9,15 +9,20 @@ import { clientIp } from './client-ip';
 // visitor's real one, also behind Cloudflare (client-ip.ts); IPv6 is counted per /64 network.
 //  - "api":    generous, every route (opt out with @SkipThrottle())
 //  - "strict": only routes marked @StrictRateLimit() (the lead form), to slow down spam
+//  - "chat":   only routes marked @ChatRateLimit() (the website chatbot), which costs money per message
 const STRICT = 'bytebun:strict-rate-limit';
+const CHAT = 'bytebun:chat-rate-limit';
 export const StrictRateLimit = () => SetMetadata(STRICT, true);
+export const ChatRateLimit = () => SetMetadata(CHAT, true);
 const isStrict = (ctx: ExecutionContext) => Reflect.getMetadata(STRICT, ctx.getHandler()) === true;
+const isChat = (ctx: ExecutionContext) => Reflect.getMetadata(CHAT, ctx.getHandler()) === true;
 
 export const rateLimitOptions = (cfg: AppConfig): ThrottlerModuleOptions => ({
   throttlers: [
     // RATE_LIMITS_DISABLED=true turns both off (testing only).
     { name: 'api', ttl: 15 * 60_000, limit: 300, skipIf: () => cfg.rateLimitsDisabled },
     { name: 'strict', ttl: cfg.leadsRateLimit.windowMs, limit: cfg.leadsRateLimit.max, skipIf: (ctx) => cfg.rateLimitsDisabled || !isStrict(ctx) },
+    { name: 'chat', ttl: cfg.chat.rateLimit.windowMs, limit: cfg.chat.rateLimit.max, skipIf: (ctx) => cfg.rateLimitsDisabled || !isChat(ctx) },
   ],
 });
 
@@ -31,9 +36,11 @@ export class ApiThrottlerGuard extends ThrottlerGuard {
   protected override async throwThrottlingException(context: ExecutionContext): Promise<void> {
     throw new ApiError(429, {
       error: 'rate_limited',
-      message: isStrict(context)
-        ? 'You have sent several messages in a short time. Please wait a little and try again, or email us directly.'
-        : 'Too many requests. Please wait a few minutes and try again.',
+      message: isChat(context)
+        ? 'You have sent a lot of messages in a short time. Please wait a few minutes, or book your call on the full form.'
+        : isStrict(context)
+          ? 'You have sent several messages in a short time. Please wait a little and try again, or email us directly.'
+          : 'Too many requests. Please wait a few minutes and try again.',
     });
   }
 }

@@ -324,6 +324,46 @@ export const site = {
     secondary: { label: 'See plans', href: '#packages' },
   },
 
+  // The website chatbot (components/ChatWidget.jsx). Its knowledge and instructions live in
+  // backend/src/chat/knowledge.ts: when prices, plans, or the FAQ above change, update that too.
+  chat: {
+    launcherLabel: 'Chat with us',
+    launcherHint: 'Questions? Ask Bun',
+    title: 'Bun from Byte Bun Tech',
+    status: 'Usually replies in seconds',
+    closeLabel: 'Close chat',
+    greeting: "Hi! I'm Bun, Byte Bun Tech's assistant. Ask me anything about websites, automations, or pricing, or tell me about your business and I'll show you how we can help.",
+    starters: ['What do you build?', 'How much does it cost?', 'Is the website really free?', 'Book a free consultation'],
+    placeholder: 'Type your question…',
+    sendLabel: 'Send',
+    typing: 'Bun is typing',
+    error: 'Sorry, that did not go through. Please try again.',
+    retry: 'Try again',
+    offlineCta: 'Open the booking page',
+    disclaimer: 'Answers come from an AI assistant and can be wrong. Prices are sample pricing.',
+    booking: {
+      title: 'Free 30-minute consultation',
+      timeZoneLabel: 'Times shown in',
+      loading: 'Loading open times…',
+      loadError: 'We could not load the open times.',
+      retry: 'Try again',
+      noTimes: 'No open times right now. Please email us and we will set one up.',
+      pickTime: 'Pick a time',
+      pickedLabel: 'Your call: {when}',
+      changeTime: 'Change',
+      firstName: 'First name',
+      lastName: 'Last name',
+      email: 'Email',
+      phone: 'Phone (optional)',
+      privacy: 'We only use this to contact you about your call.',
+      submit: 'Book my call',
+      sending: 'Booking…',
+      slotTaken: 'Sorry, that time was just booked. Please pick another one.',
+      success: 'You are booked, {firstName}! Your free call is on {when}. We have emailed you the details and a link to reschedule if you need to.',
+      fullFormLabel: 'Prefer the full form?',
+    },
+  },
+
   // The lead page (/get-started). Every button with `lead:` links here.
   // `{firstName}` is replaced with what the visitor typed (or dropped, if empty).
   getStarted: {
