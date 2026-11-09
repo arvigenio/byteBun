@@ -14,6 +14,8 @@ services:
       dockerfile: Dockerfile
       args:
         SITE_URL: ${SITE_URL:?Set SITE_URL in .env}
+        # Google Tag Manager container for the public site (build time; empty = off).
+        VITE_GTM_ID: ${VITE_GTM_ID:-}
     image: bytebun-web:latest
     restart: unless-stopped
     environment:

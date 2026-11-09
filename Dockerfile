@@ -12,6 +12,10 @@ COPY frontend/ ./
 # Public site URL, used for canonical links, Open Graph tags, and the sitemap.
 ARG SITE_URL=https://bytebuntech.com
 ENV SITE_URL=${SITE_URL}
+# Google Tag Manager container (GTM-XXXXXXX) for the public site; empty = no GTM. Baked into
+# the bundle at build time, so changing it needs a rebuild (docker compose ... up -d --build).
+ARG VITE_GTM_ID=
+ENV VITE_GTM_ID=${VITE_GTM_ID}
 RUN npm run build
 
 # ---- Stage 2: build the API (TypeScript -> dist/), then keep production dependencies only ----

@@ -30,10 +30,20 @@ export async function createApp({ serveStatic = config.isProd } = {}): Promise<N
           // HTTPS upgrades are the reverse proxy's job; this keeps local http testing working.
           upgradeInsecureRequests: null,
           // Cloudflare Web Analytics: Cloudflare injects its beacon script into pages it serves,
-          // and the beacon reports to cloudflareinsights.com. Only these two origins are added;
-          // everything else stays 'self' (live admin updates use same-origin WebSockets).
-          scriptSrc: ["'self'", 'https://static.cloudflareinsights.com'],
-          connectSrc: ["'self'", 'https://cloudflareinsights.com'],
+          // and the beacon reports to cloudflareinsights.com.
+          // Google Tag Manager (public site, frontend/src/lib/gtm.js) and the Google Analytics 4
+          // tag it loads: scripts from googletagmanager.com, hits to google-analytics.com.
+          // Only these origins are added; everything else stays 'self' (live admin updates use
+          // same-origin WebSockets). No 'unsafe-inline': GTM "Custom HTML" tags won't run.
+          scriptSrc: ["'self'", 'https://static.cloudflareinsights.com', 'https://www.googletagmanager.com'],
+          connectSrc: [
+            "'self'",
+            'https://cloudflareinsights.com',
+            'https://www.googletagmanager.com',
+            'https://*.google-analytics.com',
+            'https://*.analytics.google.com',
+          ],
+          imgSrc: ["'self'", 'data:', 'https://www.googletagmanager.com', 'https://*.google-analytics.com'],
         },
       },
     }),

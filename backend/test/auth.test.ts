@@ -101,10 +101,11 @@ describe('hidden login page', () => {
     assert.match(res.text, /admin-app/);
     assert.equal(res.headers['x-robots-tag'], 'noindex, nofollow');
     assert.equal(res.headers['cache-control'], 'no-store');
-    // CSP: own scripts, plus only Cloudflare's analytics beacon.
+    // CSP: own scripts, plus only Cloudflare's analytics beacon and Google Tag Manager / Analytics.
     const csp = String(res.headers['content-security-policy']);
-    assert.match(csp, /script-src 'self' https:\/\/static\.cloudflareinsights\.com(;|$)/);
-    assert.match(csp, /connect-src 'self' https:\/\/cloudflareinsights\.com(;|$)/);
+    assert.match(csp, /script-src 'self' https:\/\/static\.cloudflareinsights\.com https:\/\/www\.googletagmanager\.com(;|$)/);
+    assert.match(csp, /connect-src 'self' https:\/\/cloudflareinsights\.com https:\/\/www\.googletagmanager\.com https:\/\/\*\.google-analytics\.com https:\/\/\*\.analytics\.google\.com(;|$)/);
+    assert.doesNotMatch(csp, /script-src[^;]*unsafe-(inline|eval)/, 'no inline or eval scripts');
     assert.match(csp, /default-src 'self'/);
   });
 
