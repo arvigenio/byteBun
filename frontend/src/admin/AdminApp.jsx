@@ -2,6 +2,7 @@ import { usePathname } from '../lib/router.js';
 import { AdminLayout } from './AdminLayout.jsx';
 import { BookingsPage } from './BookingsPage.jsx';
 import { LeadsPage } from './LeadsPage.jsx';
+import { ProspectsPage } from './ProspectsPage.jsx';
 import { SecurityPage } from './SecurityPage.jsx';
 import { SignInPage } from './SignInPage.jsx';
 
@@ -11,6 +12,6 @@ import { SignInPage } from './SignInPage.jsx';
 export default function AdminApp() {
   const pathname = usePathname().replace(/\/+$/, '');
   if (!pathname.startsWith('/admin')) return <SignInPage />;
-  const page = pathname.startsWith('/admin/bookings') ? <BookingsPage /> : pathname.startsWith('/admin/security') ? <SecurityPage /> : <LeadsPage />;
+  const page = pathname.startsWith('/admin/bookings') ? <BookingsPage /> : pathname.startsWith('/admin/prospects') ? <ProspectsPage /> : pathname.startsWith('/admin/security') ? <SecurityPage /> : <LeadsPage />;
   return <AdminLayout pathname={pathname}>{page}</AdminLayout>;
 }

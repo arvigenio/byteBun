@@ -13,6 +13,7 @@ import { PrismaModule } from './database/prisma.module';
 import { HealthModule } from './health/health.module';
 import { LeadEmailsModule } from './leads/lead-emails.module';
 import { LeadsModule } from './leads/leads.module';
+import { ProspectsModule } from './prospects/prospects.module';
 import { RealtimeModule } from './realtime/realtime.module';
 
 // Every route is under /api (see app.ts). New integrations (payments, chatbot, ...) are new
@@ -29,6 +30,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     BookingModule,
     LeadsModule,
     AdminModule,
+    ProspectsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ApiThrottlerGuard },

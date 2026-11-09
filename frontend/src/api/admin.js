@@ -24,3 +24,11 @@ export const getSecurity = (config) => http.get('/admin/security', config);
 export const revokeSession = (id) => http.post(`/admin/security/sessions/${encodeURIComponent(id)}/revoke`, {});
 export const revokeOtherSessions = () => http.post('/admin/security/sessions/revoke-others', {});
 export const regenerateBackupCodes = (code) => http.post('/admin/security/backup-codes', { code });
+
+// Prospecting (backend/src/prospects/). Nothing is saved: results live on the server for 30 min.
+export const getProspectMeta = (config) => http.get('/admin/prospects/meta', config);
+// Searching can take up to a minute with the free map data, so a longer timeout here.
+export const searchProspects = ({ industry, location, refresh = false }, config) =>
+  http.post('/admin/prospects/search', { industry, location, refresh }, { timeout: 150_000, ...config });
+export const getProspectResults = (searchId, config) => http.get(`/admin/prospects/searches/${searchId}`, config);
+export const recheckProspectWebsite = (searchId, itemId) => http.post(`/admin/prospects/searches/${searchId}/items/${itemId}/check-website`, {}, { timeout: 30_000 });

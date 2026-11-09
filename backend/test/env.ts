@@ -26,3 +26,7 @@ process.env.TRUST_PROXY = '';
 process.env.LEADS_RATE_LIMIT_MAX = '100';
 // dist-test/test/*.js -> backend/test/fixtures/static
 process.env.STATIC_DIR = path.resolve(__dirname, '../../test/fixtures/static');
+// Prospecting: results from a fixture file, and no real website checkups (no network in tests).
+process.env.PROSPECTS_FIXTURE_FILE = path.resolve(__dirname, '../../test/fixtures/prospects.json');
+process.env.PROSPECTS_WEBSITE_CHECKS = 'false';
+process.env.GOOGLE_PLACES_API_KEY = '';

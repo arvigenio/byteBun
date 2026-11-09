@@ -69,6 +69,13 @@ services:
       LEADS_REPLY_TO: ${LEADS_REPLY_TO:-}
       SITE_URL: ${SITE_URL:-http://localhost:5173}
       CALL_MEETING_URL: ${CALL_MEETING_URL:-}
+      # Admin Prospecting page: the first source with a key (HERE, Geoapify, Google), else free OpenStreetMap.
+      PROSPECTS_SOURCE: ${PROSPECTS_SOURCE:-}
+      HERE_API_KEY: ${HERE_API_KEY:-}
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      PROSPECTS_MAX_RESULTS: ${PROSPECTS_MAX_RESULTS:-60}
+      PROSPECTS_WEBSITE_CHECKS: ${PROSPECTS_WEBSITE_CHECKS:-true}
       # Every email goes to this inbox instead of its real recipients (development only).
       TESTING_EMAIL_ADDRESS: ${TESTING_EMAIL_ADDRESS:-}
       CHECKPOINT_DISABLE: "1" # no Prisma CLI telemetry/update checks

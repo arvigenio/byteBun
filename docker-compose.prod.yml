@@ -49,6 +49,13 @@ services:
       # Public site URL: the reschedule/cancel links in lead emails point here.
       SITE_URL: ${SITE_URL:?Set SITE_URL in .env}
       CALL_MEETING_URL: ${CALL_MEETING_URL:-}
+      # Admin Prospecting page: the first source with a key (HERE, Geoapify, Google), else free OpenStreetMap.
+      PROSPECTS_SOURCE: ${PROSPECTS_SOURCE:-}
+      HERE_API_KEY: ${HERE_API_KEY:-}
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      PROSPECTS_MAX_RESULTS: ${PROSPECTS_MAX_RESULTS:-60}
+      PROSPECTS_WEBSITE_CHECKS: ${PROSPECTS_WEBSITE_CHECKS:-true}
       # TESTING_EMAIL_ADDRESS is deliberately not passed: production always emails real recipients.
     ports:
       - "127.0.0.1:${APP_PORT:-4000}:4000"

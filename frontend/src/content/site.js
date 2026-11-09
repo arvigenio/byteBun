@@ -22,7 +22,7 @@ export const site = {
   contact: {
     email: 'hello@bytebuntech.com', // PLACEHOLDER: confirm the real inbox
     // PLACEHOLDER: calendar booking link (e.g. GoHighLevel or Calendly). When empty, the
-    // "Book my free audit call" button links to the lead page instead.
+    // "Book my free consultation" button links to the lead page instead.
     bookingUrl: '',
   },
 
@@ -39,7 +39,7 @@ export const site = {
     { label: 'Demos', href: '#demos' },
     { label: 'FAQ', href: '#faq' },
   ],
-  headerCta: { label: 'Get a free audit', lead: 'header' },
+  headerCta: { label: 'Get a free consultation', lead: 'header' },
 
   hero: {
     tag: 'For dental clinics, vet clinics, and local service businesses',
@@ -47,7 +47,7 @@ export const site = {
     pillars: ['Custom websites', 'Web applications', 'Custom automations'],
     title: 'Custom websites and automations that fill your appointment book.',
     lead: 'We design and build custom websites, web applications, and automations around how your business actually runs, so every lead is answered and missed calls become booked visits. Your website, domain, and hosting are free and included.',
-    primaryCta: { label: 'Get my free audit', lead: 'hero' },
+    primaryCta: { label: 'Get my free consultation', lead: 'hero' },
     secondaryCta: { label: 'See what we build', href: '#build' },
     trust: ['Built for you, not a template', 'Free domain and hosting', 'Typically live in 2 to 4 weeks'],
     chat: {
@@ -96,7 +96,7 @@ export const site = {
         cta: { label: 'Automate my workflow', lead: 'build-automation' },
       },
     ],
-    cta: { text: 'Not sure which you need? Most clients start with both.', label: 'Get a free audit', lead: 'build' },
+    cta: { text: 'Not sure which you need? Most clients start with both.', label: 'Get a free consultation', lead: 'build' },
   },
 
   freeBand: {
@@ -120,7 +120,7 @@ export const site = {
       { title: 'No-shows leave empty chairs', text: 'An empty slot is lost revenue. Two-way reminders and easy rescheduling help fill the day.' },
       { title: 'Overdue patients drift away', text: 'Recall messages for cleanings, vaccines, and check-ups bring existing patients back without extra staff time.' },
     ],
-    cta: { text: 'See where your clinic is leaking leads.', label: 'Get a free audit', lead: 'problem' },
+    cta: { text: 'See where your clinic is leaking leads.', label: 'Get a free consultation', lead: 'problem' },
   },
 
   services: {
@@ -150,7 +150,7 @@ export const site = {
       { figure: '$0', text: 'For your website, domain, and hosting while your plan is active.' },
     ],
     ctas: [
-      { label: 'Start with a free audit', lead: 'metrics' },
+      { label: 'Start with a free consultation', lead: 'metrics' },
       { label: 'See it in action', href: '#demos' },
     ],
   },
@@ -237,7 +237,7 @@ export const site = {
     title: 'How it works',
     subtitle: 'From first call to live system in a few weeks.',
     items: [
-      { title: 'Book a free audit call', text: 'Tell us about your clinic. We review your website, response time, and follow-up and show you where leads slip through.' },
+      { title: 'Book a free consultation', text: 'Tell us about your clinic. We review your website, response time, and follow-up and show you where leads slip through.' },
       { title: 'Get a clear proposal', text: 'Three options with fixed scope and pricing, within 24 hours of the call.' },
       { title: 'We build and test', text: 'Your free website, domain, hosting, automations, and assistant are built and tested before they go live.' },
       { title: 'Launch and keep improving', text: 'Monthly reports, small changes, and support are included in your plan.' },
@@ -265,8 +265,8 @@ export const site = {
 
   finalCta: {
     title: 'Get a custom website and automations, with domain and hosting free',
-    text: 'Book a free 30-minute audit call. We will review your website and follow-up and send you a clear plan, with no obligation.',
-    primary: { label: 'Book my free audit call', lead: 'final-cta' },
+    text: 'Book a free 30-minute consultation. We will review your website and follow-up and send you a clear plan, with no obligation.',
+    primary: { label: 'Book my free consultation', lead: 'final-cta' },
     secondary: { label: 'Email us' }, // uses contact.email
     reassurance: ['Free 30-minute call', 'Proposal within 24 hours', 'No obligation'],
   },
@@ -279,7 +279,7 @@ export const site = {
   // <head> tags, injected into index.html at build time by seo-plugin.js.
   meta: {
     title: 'Custom Websites, Web Apps and Automation for Clinics | Byte Bun Tech',
-    description: 'Byte Bun Tech builds custom websites, web apps, and automations for dental clinics, vet clinics, and local businesses, with free domain and hosting. Book a free audit.',
+    description: 'Byte Bun Tech builds custom websites, web apps, and automations for dental clinics, vet clinics, and local businesses, with free domain and hosting. Book a free consultation.',
     keywords: 'custom website development, custom web application, custom automation, business process automation, free website for clinics, free domain and hosting, AI chatbot for clinics, dental clinic website, vet clinic website, missed call text back, appointment reminders, GoHighLevel agency, n8n automation',
     // SITE_URL (env) overrides this at build time.
     canonical: 'https://bytebuntech.com/',
@@ -320,17 +320,17 @@ export const site = {
   },
 
   stickyBar: {
-    primary: { label: 'Free audit', lead: 'sticky-bar' },
+    primary: { label: 'Free consultation', lead: 'sticky-bar' },
     secondary: { label: 'See plans', href: '#packages' },
   },
 
   // The lead page (/get-started). Every button with `lead:` links here.
   // `{firstName}` is replaced with what the visitor typed (or dropped, if empty).
   getStarted: {
-    pageTitle: 'Get your free audit | Byte Bun Tech',
+    pageTitle: 'Get your free consultation | Byte Bun Tech',
     backLabel: 'Back to the website',
     aside: {
-      eyebrow: 'Free audit',
+      eyebrow: 'Free consultation',
       title: "Let's build something that works as hard as you do",
       text: 'Tell us about your business in about a minute. We will review your website, response time, and follow-up, then send you a clear plan.',
       nextTitle: 'What happens next',
@@ -435,7 +435,7 @@ export const site = {
     retryLabel: 'Try again',
     success: {
       title: 'Congratulations, {firstName}!',
-      text: 'Your free audit call is booked. We will send the details to your email.',
+      text: 'Your free consultation is booked. We will send the details to your email.',
       booked: '{when}',
       seconds: 8, // auto-return countdown
       returning: 'Taking you back to the website in {seconds}s',
@@ -450,7 +450,7 @@ export const site = {
   manageBooking: {
     pageTitle: 'Manage your call | Byte Bun Tech',
     backLabel: 'Back to the website',
-    eyebrow: 'Your free audit call',
+    eyebrow: 'Your free consultation',
     loading: 'Loading your booking…',
     greeting: 'Hi {firstName}, here is your call',
     noCallTitle: 'Hi {firstName}, you have no call booked',

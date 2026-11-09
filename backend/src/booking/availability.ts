@@ -1,4 +1,4 @@
-// When the team takes free audit calls. This file is the single source of truth: the lead page
+// When the team takes free consultations. This file is the single source of truth: the lead page
 // asks GET /api/booking/slots for call times, and POST /api/leads only accepts an open one.
 // Times are Philippine time; visitors see them converted to their own time zone.
 export const availability = Object.freeze({

@@ -5,7 +5,7 @@
 //  To the admins (ALERT_EMAILS, admin template): new lead, and every reschedule/cancel (except to
 //    the admin who made it).
 // Subjects are plain sentences that always name the client, e.g.
-//   "Maria, your free audit call is confirmed for Wed, Nov 18 at 7:30 PM"
+//   "Maria, your free consultation is confirmed for Wed, Nov 18 at 7:30 PM"
 //   "Josue Mapagdalita moved Maria Santos's call to Wed, Nov 18 at 7:30 PM (PH time)"
 // Every send runs in the background: a slow or failing mail server never affects the visitor.
 import { Inject, Injectable, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
@@ -87,7 +87,7 @@ function leadMailBase({ lead, booking, manageUrl, meetingUrl }: LeadMailContext)
   const t = callTimeParts(booking.startsAt, booking.timeZone);
   const ev = callEvent({ bookingId: booking.id, startsAt: booking.startsAt, sequence: booking.sequence, meetingUrl, manageUrl });
   const links = calendarLinks(ev);
-  const event = { month: t.month, day: t.day, weekday: t.weekday, label: 'Your free audit call', time: t.range, sub: `${t.timeZone} · ${availability.slotMinutes}-minute video call` };
+  const event = { month: t.month, day: t.day, weekday: t.weekday, label: 'Your free consultation', time: t.range, sub: `${t.timeZone} · ${availability.slotMinutes}-minute video call` };
   const join = meetingUrl ? [{ title: 'Video call', buttons: [{ label: 'Join the video call', href: meetingUrl, primary: true }], note: 'The link opens your call at the time above.' }] : [];
   const calendar = {
     title: 'Add it to your calendar',
@@ -130,7 +130,7 @@ export function confirmationMail(ctx: LeadMailContext): Mail {
   const rendered = renderEmail({
     audience: 'customer',
     preheader: `${t.long}. Add it to your calendar, or reschedule in one click.`,
-    hero: { badge: '✓', title: `You're booked, ${ctx.lead.firstName}!`, subtitle: `Your free ${availability.slotMinutes}-minute audit call is confirmed.` },
+    hero: { badge: '✓', title: `You're booked, ${ctx.lead.firstName}!`, subtitle: `Your free ${availability.slotMinutes}-minute consultation is confirmed.` },
     label: 'Booking confirmed',
     tone: 'success',
     title: `See you on ${t.weekday}`,
@@ -141,7 +141,7 @@ export function confirmationMail(ctx: LeadMailContext): Mail {
     outro: ['Questions before the call? Just reply to this email and a real person will answer.'],
     footer: LEAD_FOOTER,
   });
-  return leadMail(ctx, `${ctx.lead.firstName}, your free audit call is confirmed for ${t.shortDate} at ${t.start}`, rendered, icsFile(ev));
+  return leadMail(ctx, `${ctx.lead.firstName}, your free consultation is confirmed for ${t.shortDate} at ${t.start}`, rendered, icsFile(ev));
 }
 
 export function reminderMail(ctx: LeadMailContext, now = new Date()): Mail {
@@ -151,19 +151,19 @@ export function reminderMail(ctx: LeadMailContext, now = new Date()): Mail {
   const when = t.ymd === today ? 'today' : t.ymd === tomorrow ? 'tomorrow' : `on ${t.shortDate}`;
   const rendered = renderEmail({
     audience: 'customer',
-    preheader: `Your free audit call is ${when} at ${t.start}. Can't make it? Reschedule in one click.`,
+    preheader: `Your free consultation is ${when} at ${t.start}. Can't make it? Reschedule in one click.`,
     hero: { badge: '⏰', title: `Your call is ${when}`, subtitle: t.range },
     label: 'Reminder',
     tone: 'info',
     title: `Hi ${ctx.lead.firstName}, see you soon`,
-    intro: ["A quick reminder about your free audit call with Byte Bun Tech. It takes 30 minutes and there's nothing to prepare: just bring your questions."],
+    intro: ["A quick reminder about your free consultation with Byte Bun Tech. It takes 30 minutes and there's nothing to prepare: just bring your questions."],
     event,
     actions: [...join, manage, calendar],
     steps: WHAT_WE_COVER,
     outro: ["Running late or something came up? Use the Reschedule button above, or reply to this email."],
     footer: LEAD_FOOTER,
   });
-  return leadMail(ctx, `Reminder for ${ctx.lead.firstName}: your free audit call is ${when} at ${t.start}`, rendered, icsFile(ev));
+  return leadMail(ctx, `Reminder for ${ctx.lead.firstName}: your free consultation is ${when} at ${t.start}`, rendered, icsFile(ev));
 }
 
 /** Who changed the booking: the lead (their link) or our team (admin site), with an optional note to the lead. */
@@ -195,10 +195,10 @@ export function rescheduledMail(ctx: LeadMailContext, previous: { startsAt: Date
     title: `New time: ${t.weekday}, ${t.month} ${t.day}`,
     intro: byTeam
       ? [
-          `Hi ${ctx.lead.firstName}, something came up on our side, so we have moved your free audit call to the time below. We are sorry for the inconvenience.`,
+          `Hi ${ctx.lead.firstName}, something came up on our side, so we have moved your free consultation to the time below. We are sorry for the inconvenience.`,
           `Your previous time (${old.long}) is cancelled. If the new time does not work for you, pick another one in a click with the Reschedule button.`,
         ]
-      : [`Hi ${ctx.lead.firstName}, your free audit call has been moved. The old time (${old.long}) is cancelled.`],
+      : [`Hi ${ctx.lead.firstName}, your free consultation has been moved. The old time (${old.long}) is cancelled.`],
     event,
     callout: teamNote(src),
     actions: [...join, { ...calendar, note: 'Already added the old time? The attached invite.ics updates it. Or add the new time with a button above.' }, manage],
@@ -227,10 +227,10 @@ export function cancelledMail(ctx: LeadMailContext, src: ChangeSource = { by: 'l
     title: byTeam ? `Sorry, ${ctx.lead.firstName}` : `Sorry we'll miss you, ${ctx.lead.firstName}`,
     intro: byTeam
       ? [
-          `Unfortunately we had to cancel your free audit call on ${t.long}. We apologise for the inconvenience.`,
+          `Unfortunately we had to cancel your free consultation on ${t.long}. We apologise for the inconvenience.`,
           'We would still love to talk. Pick a new time with the button below and it is booked straight away.',
         ]
-      : [`Your free audit call on ${t.long} is cancelled.`],
+      : [`Your free consultation on ${t.long} is cancelled.`],
     event: { ...event, label: 'Cancelled', struck: true },
     callout: teamNote(src),
     actions: [{ title: byTeam ? 'Book a new time' : 'Changed your mind?', buttons: [{ label: 'Pick a new time', href: ctx.manageUrl, primary: true }] }],

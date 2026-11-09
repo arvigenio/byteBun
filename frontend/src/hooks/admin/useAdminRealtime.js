@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 import { fetchLead, refreshAfterEvent } from '../../store/adminDataSlices.js';
+import { prospectUpdated } from '../../store/adminProspectsSlice.js';
 
 // Live admin updates (backend/src/realtime/admin-realtime.gateway.ts, Socket.IO at /api/realtime).
 // The browser's session cookie authenticates the connection. On every event the lists, the
@@ -57,6 +58,8 @@ export function useAdminRealtime(me) {
       dispatch(refreshAfterEvent(e));
     });
     socket.on('lead.updated', (e) => dispatch(refreshAfterEvent(e)));
+    // Prospecting: a website checkup finished (no toast; the row updates and re-ranks).
+    socket.on('prospects.updated', (e) => dispatch(prospectUpdated(e)));
 
     return () => {
       socket.removeAllListeners();

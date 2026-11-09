@@ -72,3 +72,22 @@ export const adminRescheduleSchema = yup.object({
   note,
 });
 export const adminCancelSchema = yup.object({ note });
+
+// Prospecting search. Mirrors searchSchema in backend/src/prospects/prospects.controller.ts.
+const PROSPECT_TEXT = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} &'’.,()/-]*$/u;
+export const prospectSearchSchema = yup.object({
+  industry: yup
+    .string()
+    .trim()
+    .required('Enter an industry, like "dentist" or "hair salon".')
+    .min(2, 'Enter at least 2 characters.')
+    .max(80, 'Industry is too long (80 characters max).')
+    .matches(PROSPECT_TEXT, 'Use letters, numbers and spaces only.'),
+  location: yup
+    .string()
+    .trim()
+    .required('Enter a city or a country, like "Makati" or "Philippines".')
+    .min(2, 'Enter at least 2 characters.')
+    .max(120, 'Location is too long (120 characters max).')
+    .matches(PROSPECT_TEXT, 'Use letters, numbers and spaces only.'),
+});

@@ -58,9 +58,9 @@ const isTo = (email: string) => (m: { to: string | string[] }) => [m.to].flat().
 describe('new lead', () => {
   it('the lead gets a designed confirmation with calendar buttons, an .ics and their manage link', async () => {
     const lead = await bookLead();
-    const mail = await waitForMail((m) => isTo(lead.email)(m) && m.subject.startsWith('Maria, your free audit call is confirmed for '));
+    const mail = await waitForMail((m) => isTo(lead.email)(m) && m.subject.startsWith('Maria, your free consultation is confirmed for '));
     assert.equal(mail.from, config.mail.leadsFrom);
-    assert.match(mail.subject, /^Maria, your free audit call is confirmed for \w{3}, \w{3} \d{1,2} at \d{1,2}:\d{2} (AM|PM)$/);
+    assert.match(mail.subject, /^Maria, your free consultation is confirmed for \w{3}, \w{3} \d{1,2} at \d{1,2}:\d{2} (AM|PM)$/);
     assert.deepEqual(mail.names, { [lead.email]: 'Maria Santos' }, 'addressed by name');
     const html = mail.html!;
     for (const needle of ['calendar.google.com/calendar/render', 'outlook.live.com/calendar', 'outlook.office.com/calendar', 'calendar.yahoo.com', '/manage-booking#t=', "You&#39;re booked, Maria!", '#FFA612']) {
@@ -96,7 +96,7 @@ describe('reminders', () => {
     await t.prisma.booking.updateMany({ where: { leadId: lead.id }, data: { reminderAt: new Date(Date.now() - 1000) } });
     assert.equal(await emails.runDueReminders(), 1);
     assert.equal(await emails.runDueReminders(), 0, 'never twice');
-    const mail = mailsTo(lead.email).find((m) => /^Reminder for Maria: your free audit call is (today|tomorrow|on \w{3}, \w{3} \d{1,2}) at \d{1,2}:\d{2} (AM|PM)$/.test(m.subject));
+    const mail = mailsTo(lead.email).find((m) => /^Reminder for Maria: your free consultation is (today|tomorrow|on \w{3}, \w{3} \d{1,2}) at \d{1,2}:\d{2} (AM|PM)$/.test(m.subject));
     assert.ok(mail);
     assert.ok(mail.html!.includes('/manage-booking#t='));
   });
@@ -259,11 +259,11 @@ describe('wording', () => {
 describe('TESTING_EMAIL_ADDRESS', () => {
   it('sends every email to the test inbox and says who it was for', async () => {
     const redirected = redirectForTesting(
-      { to: ['maria@example.com', JOSUE], names: { 'maria@example.com': 'Maria Santos' }, subject: 'Maria, your free audit call is confirmed', text: 'Body', html: '<html><body style="x">Hi</body></html>' },
+      { to: ['maria@example.com', JOSUE], names: { 'maria@example.com': 'Maria Santos' }, subject: 'Maria, your free consultation is confirmed', text: 'Body', html: '<html><body style="x">Hi</body></html>' },
       'inbox@bytebuntech.com',
     );
     assert.equal(redirected.to, 'inbox@bytebuntech.com');
-    assert.equal(redirected.subject, 'Maria, your free audit call is confirmed', 'subject unchanged');
+    assert.equal(redirected.subject, 'Maria, your free consultation is confirmed', 'subject unchanged');
     assert.match(redirected.text, /^Intended for: Maria Santos <maria@example\.com>, Josue Mapagdalita <josue\.mapagdalita@bytebuntech\.com>/);
     assert.match(redirected.html!, /<body style="x"><div[^>]*>Intended for: Maria Santos &lt;maria@example\.com&gt;/);
 

@@ -42,6 +42,11 @@ export class AdminEvents {
     this.realtime.emit('lead.updated', { lead });
   }
 
+  /** Prospecting: a website checkup finished, so that business's score may have changed. */
+  prospectsUpdated(payload: { searchId: string; item: unknown }) {
+    this.realtime.emit('prospects.updated', payload);
+  }
+
   bookingChanged(change: BookingChange) {
     this.cache.invalidate('bookings', 'slots', 'leads'); // the leads list shows call times
     this.realtime.emit('booking.changed', change);

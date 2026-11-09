@@ -17,7 +17,7 @@ export interface CallEvent {
 export function callEvent(opts: { bookingId: number; startsAt: Date; sequence: number; meetingUrl: string; manageUrl: string }): CallEvent {
   const end = new Date(opts.startsAt.getTime() + availability.slotMinutes * 60_000);
   const description = [
-    `Your free ${availability.slotMinutes}-minute audit call with Byte Bun Tech.`,
+    `Your free ${availability.slotMinutes}-minute consultation with Byte Bun Tech.`,
     '',
     "We'll review your website, response time and follow-up, show you where leads slip through, and send you a clear plan within 24 hours.",
     '',
@@ -27,7 +27,7 @@ export function callEvent(opts: { bookingId: number; startsAt: Date; sequence: n
   return {
     uid: `booking-${opts.bookingId}@bytebuntech.com`,
     sequence: opts.sequence,
-    title: 'Free audit call with Byte Bun Tech',
+    title: 'Free consultation with Byte Bun Tech',
     description,
     location: opts.meetingUrl || 'Video call (link sent by email)',
     start: opts.startsAt,

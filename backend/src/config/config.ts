@@ -33,6 +33,24 @@ export interface AppConfig {
   auth: AuthConfig;
   mail: MailConfig;
   booking: BookingConfig;
+  prospects: ProspectsConfig;
+}
+
+export interface ProspectsConfig {
+  /** Where businesses come from: here | geoapify | google | osm (free, slow). */
+  source: 'here' | 'geoapify' | 'google' | 'osm';
+  /** HERE Geocoding & Search key (HERE's own business data: phone, website, email; no ratings). Also used for map tiles. */
+  hereApiKey: string;
+  /** Geoapify Places API key (OpenStreetMap-based business data, fast; no ratings). */
+  geoapifyApiKey: string;
+  /** Google Places API (New) key: business data with ratings and reviews. */
+  googleApiKey: string;
+  /** Most businesses one search returns (Google: at most 60). */
+  maxResults: number;
+  /** Open each prospect's homepage to check it (HTTPS, mobile, booking, chat, age). */
+  websiteChecks: boolean;
+  /** Tests only: read search results from this JSON file instead of a real source. */
+  fixtureFile: string;
 }
 
 export interface AuthConfig {
@@ -177,6 +195,20 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const meetingUrl = env.CALL_MEETING_URL?.trim() || '';
   if (meetingUrl && !/^https:\/\//i.test(meetingUrl)) problems.push('CALL_MEETING_URL must start with https:// (or be left empty).');
 
+  const googleApiKey = env.GOOGLE_PLACES_API_KEY?.trim() || '';
+  const geoapifyApiKey = env.GEOAPIFY_API_KEY?.trim() || '';
+  const hereApiKey = env.HERE_API_KEY?.trim() || '';
+  // PROSPECTS_SOURCE picks one explicitly; otherwise the first with a key: HERE, Geoapify, Google,
+  // then free OpenStreetMap.
+  const sourceRaw = env.PROSPECTS_SOURCE?.trim().toLowerCase() || '';
+  const sources = ['here', 'geoapify', 'google', 'osm'];
+  if (sourceRaw && !sources.includes(sourceRaw)) problems.push('PROSPECTS_SOURCE must be here, geoapify, google or osm (or left empty).');
+  if (sourceRaw === 'here' && !hereApiKey) problems.push('PROSPECTS_SOURCE=here needs HERE_API_KEY.');
+  if (sourceRaw === 'geoapify' && !geoapifyApiKey) problems.push('PROSPECTS_SOURCE=geoapify needs GEOAPIFY_API_KEY.');
+  if (sourceRaw === 'google' && !googleApiKey) problems.push('PROSPECTS_SOURCE=google needs GOOGLE_PLACES_API_KEY.');
+  const prospectSource = (sources.includes(sourceRaw) ? sourceRaw : hereApiKey ? 'here' : geoapifyApiKey ? 'geoapify' : googleApiKey ? 'google' : 'osm') as ProspectsConfig['source'];
+  const prospectsFixture = nodeEnv === 'test' ? env.PROSPECTS_FIXTURE_FILE?.trim() || '' : '';
+
   const config: AppConfig = {
     nodeEnv,
     isProd,
@@ -211,6 +243,15 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       testingAddress,
     },
     booking: { siteUrl, meetingUrl },
+    prospects: {
+      source: prospectSource,
+      hereApiKey,
+      geoapifyApiKey,
+      googleApiKey,
+      maxResults: int('PROSPECTS_MAX_RESULTS', 60, { min: 5, max: prospectSource === 'google' ? 60 : prospectSource === 'here' ? 100 : 200 }),
+      websiteChecks: bool('PROSPECTS_WEBSITE_CHECKS', true),
+      fixtureFile: prospectsFixture,
+    },
   };
 
   if (bool('RATE_LIMITS_DISABLED', false)) {
