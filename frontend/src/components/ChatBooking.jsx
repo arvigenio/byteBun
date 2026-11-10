@@ -5,9 +5,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { site } from '../content/site.js';
 import { leadSchema } from '../lib/leadSchema.js';
 import { leadHref, onRouteLinkClick } from '../lib/router.js';
-import { dateKey, detectTimeZone, formatTime, formatWhen, groupByDate, timeZoneOptions } from '../lib/calendar.js';
+import { dateKey, detectTimeZone, formatWhen, timeZoneOptions } from '../lib/calendar.js';
 import { fetchSlots } from '../store/leadFormSlice.js';
 import { bookFromChat, bookingErrorCleared } from '../store/chatSlice.js';
+import { SlotCalendar } from './SlotCalendar.jsx';
 import { Icon } from './ui/Icon.jsx';
 
 const b = site.chat.booking;
@@ -17,9 +18,8 @@ const fill = (text, values) => text.replace(/\{(\w+)\}/g, (_, k) => values[k] ??
 // The card fields only: the rest of the lead (business type, goals, ...) comes from the chat.
 const schema = leadSchema.pick(['firstName', 'lastName', 'email', 'phone', 'meetingAt', 'timeZone', 'website']);
 
-const dayFormat = (key, opts) => new Intl.DateTimeFormat(undefined, { ...opts, timeZone: 'UTC' }).format(new Date(`${key}T12:00:00Z`));
-
-// The booking calendar inside the chat: pick a day, pick a time, add name and email, book.
+// The booking calendar inside the chat: pick a day on the month calendar (SlotCalendar.jsx, compact),
+// pick a time, add name and email, book.
 // `prefill` is what the assistant learned in the chat (backend/src/chat/chat.service.ts).
 export function ChatBooking({ prefill }) {
   const dispatch = useDispatch();
@@ -52,15 +52,23 @@ export function ChatBooking({ prefill }) {
   }, [fields, setError, setValue, dispatch]);
 
   const taken = useMemo(() => new Set(slots.taken), [slots.taken]);
-  const groups = useMemo(() => groupByDate(slots.items.filter((iso) => !taken.has(iso)), timeZone), [slots.items, taken, timeZone]);
-  const days = [...groups.keys()];
-  const [pickedDay, setPickedDay] = useState(null);
-  const activeDay = (pickedDay && groups.has(pickedDay) && pickedDay) || (meetingAt && dateKey(meetingAt, timeZone)) || days[0];
+  const hasOpenTime = slots.items.some((iso) => !taken.has(iso));
+  // "Change" goes back to the calendar on the day of the time they had chosen.
+  const [lastDay, setLastDay] = useState(null);
 
   // A time someone else just booked is un-chosen.
   useEffect(() => {
     if (meetingAt && taken.has(meetingAt)) setValue('meetingAt', '');
   }, [meetingAt, taken, setValue]);
+
+  // The time the visitor already chose in the chat starts picked, once the slots show it's still open.
+  const suggested = prefill?.meetingAt;
+  const [suggestionUsed, setSuggestionUsed] = useState(false);
+  useEffect(() => {
+    if (suggestionUsed || !suggested || !slots.items.length) return;
+    setSuggestionUsed(true);
+    if (slots.items.includes(suggested) && !taken.has(suggested)) setValue('meetingAt', suggested, { shouldValidate: true });
+  }, [suggestionUsed, suggested, slots.items, taken, setValue]);
 
   const zones = useMemo(() => timeZoneOptions(timeZone), [timeZone]);
 
@@ -114,53 +122,35 @@ export function ChatBooking({ prefill }) {
         </p>
       ) : !slots.items.length ? (
         <p className="mt-3 text-sm text-muted">{b.loading}</p>
-      ) : !days.length ? (
+      ) : !hasOpenTime ? (
         <p className="mt-3 text-sm text-muted">{b.noTimes}</p>
       ) : !meetingAt ? (
         <>
           <p className="mt-3 mb-1.5 text-xs font-semibold tracking-wide text-soft-violet uppercase">{b.pickTime}</p>
-          <div data-lenis-prevent className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1.5" role="tablist" aria-label="Days">
-            {days.map((key) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={key === activeDay}
-                onClick={() => setPickedDay(key)}
-                className={`flex w-12 flex-none cursor-pointer flex-col items-center rounded-xl border-2 py-1.5 text-xs transition-all ${
-                  key === activeDay
-                    ? 'scale-105 border-transparent bg-linear-to-b from-byte-purple to-soft-violet text-cream-dough shadow-md'
-                    : 'border-line bg-lavender-mist/50 text-midnight-plum hover:border-soft-violet motion-safe:hover:-translate-y-0.5'
-                }`}
-              >
-                <span>{dayFormat(key, { weekday: 'short' })}</span>
-                <span className="text-base font-bold">{Number(key.slice(8))}</span>
-                <span className="opacity-80">{dayFormat(key, { month: 'short' })}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={`Times on ${dayFormat(activeDay, { weekday: 'long', month: 'long', day: 'numeric' })}`}>
-            {(groups.get(activeDay) ?? []).map((iso, i) => (
-              <button
-                key={`${activeDay}-${iso}`}
-                type="button"
-                role="radio"
-                aria-checked={false}
-                onClick={() => setValue('meetingAt', iso, { shouldValidate: true })}
-                style={{ animationDelay: `${i * 40}ms` }}
-                className="cursor-pointer rounded-xl border-2 border-circuit-teal/40 bg-circuit-teal/10 py-2 text-sm font-semibold text-midnight-plum transition-all hover:border-circuit-teal hover:bg-circuit-teal/25 motion-safe:animate-pop motion-safe:hover:scale-105"
-              >
-                {formatTime(iso, timeZone)}
-              </button>
-            ))}
-          </div>
-          {fieldError('meetingAt') && <p className="mt-2 text-xs text-danger">{error || fieldError('meetingAt')}</p>}
+          <SlotCalendar
+            compact
+            items={slots.items}
+            taken={slots.taken}
+            timeZone={timeZone}
+            selected={meetingAt}
+            defaultDay={lastDay}
+            radio={register('meetingAt')}
+            error={fieldError('meetingAt') && (error || fieldError('meetingAt'))}
+            errorId="chat-booking-time-error"
+          />
         </>
       ) : (
         <form onSubmit={onSubmit} noValidate className="mt-3 grid gap-2">
           <div className="flex items-center justify-between gap-2 rounded-xl border-2 border-honey-gold/60 bg-gold-tint px-2.5 py-2 text-sm font-semibold text-midnight-plum motion-safe:animate-pop">
             <span>{fill(b.pickedLabel, { when: formatWhen(meetingAt, timeZone) })}</span>
-            <button type="button" className="flex-none cursor-pointer text-xs font-semibold text-byte-purple underline" onClick={() => setValue('meetingAt', '')}>
+            <button
+              type="button"
+              className="flex-none cursor-pointer text-xs font-semibold text-byte-purple underline"
+              onClick={() => {
+                setLastDay(dateKey(meetingAt, timeZone));
+                setValue('meetingAt', '');
+              }}
+            >
               {b.changeTime}
             </button>
           </div>
@@ -190,7 +180,7 @@ export function ChatBooking({ prefill }) {
 
       <p className="mt-2.5 text-[11px] text-muted">
         {b.fullFormLabel}{' '}
-        <a href={leadHref('chatbot')} onClick={onRouteLinkClick} className="font-semibold text-byte-purple underline">
+        <a href={leadHref('chat-link')} onClick={onRouteLinkClick} className="font-semibold text-byte-purple underline">
           {site.chat.offlineCta}
         </a>
       </p>
@@ -209,7 +199,7 @@ function Field({ label, error, ref, ...input }) {
       <input
         ref={ref}
         aria-invalid={!!error}
-        className={`min-h-10 rounded-xl border-2 bg-lavender-mist/40 px-2.5 text-sm font-normal text-midnight-plum transition-colors outline-none focus:border-soft-violet focus:bg-cream-dough ${error ? 'border-danger' : 'border-line'}`}
+        className={`min-h-10 w-full min-w-0 rounded-xl border-2 bg-lavender-mist/40 px-2.5 text-sm font-normal text-midnight-plum transition-colors outline-none focus:border-soft-violet focus:bg-cream-dough ${error ? 'border-danger' : 'border-line'}`}
         {...input}
       />
       {error && <span className="font-normal text-danger">{error}</span>}

@@ -182,6 +182,13 @@ Brand colours used:
 - **The link stays out of logs.** The token is in the `#` part of the address, which browsers never send to servers, so it never appears in server logs.
 - **Every change emails the lead** (with an `.ics` that updates or removes the event in their calendar) **and both admins** (`[Byte Bun Leads] Call rescheduled / cancelled`).
 
+**Admins can book a call for someone** who phoned, messaged or met the team: **New booking** on the Bookings page.
+
+- **Only the name, email and an open time are needed.** The same rules as the lead page apply: open slots only, one upcoming call per email. The time is picked on the same month calendar as the lead page and the chat.
+- **What they want is optional:** their line of business, goals and features (the lead page's choices), and notes for the team. All of it shows in the lead drawer and in the other admin's email.
+- **The person gets the usual confirmation** (worded for a call our team booked) and the reminder.
+- **The other admin is emailed** ("Josue Mapagdalita booked a call with …") and sees it live. The lead is saved with "Booked via: Admin site".
+
 **Admins** reschedule or cancel from the lead drawer (the Bookings calendar or list, or Leads):
 
 - **Reschedule** offers only the open times. Cancel asks for confirmation.
@@ -199,6 +206,17 @@ Brand colours used:
 - **Every email goes to that inbox instead:** lead confirmations, reminders, admin notifications, even sign-in codes.
 - **The real recipients are shown** in the subject (`[TEST → lead@example.com] ...`) and in a banner.
 - **Production ignores the setting**, so real customers are always emailed there.
+
+### Tasks
+
+The Tasks page (`/admin/tasks`) is a shared kanban board: To do, In progress, Done.
+
+- **Each task has its own page** (`/admin/tasks/12`, opened from the card's title). Its subtasks sit on a board of their own, in the same three columns. A line on each card shows how far its subtasks are.
+- **A task can be assigned to an admin** from the card's ⋯ menu, the task dialog, or the task's page.
+- **Assigning a task to the other admin emails them** ("Josue Mapagdalita assigned you a task: …") and shows them a toast if they are signed in. Assigning a task to yourself, unassigning it, or saving it without changing who it's for sends nothing.
+- **Every change shows live** for both admins: moves, edits, assignments and subtasks.
+
+Code: `backend/src/tasks/` (the email is `task-emails.ts`) and `frontend/src/admin/TasksPage.jsx`, `TaskPage.jsx`, `taskBoard.jsx`.
 
 ## How it fits together
 

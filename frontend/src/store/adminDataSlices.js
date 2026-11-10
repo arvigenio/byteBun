@@ -31,10 +31,12 @@ export const fetchLeadOptions = thunk('adminLeads/options', (_, { signal }) => a
 const leads = createSlice({
   name: 'adminLeads',
   initialState: {
-    query: { q: '', status: '', page: 1 },
+    query: { q: '', status: '', from: '', page: 1 },
     items: [],
     total: 0,
     pageSize: 25,
+    // Where the matching leads came from (GET /api/admin/leads -> sources).
+    sources: null,
     status: 'idle',
     error: '',
     // The lead drawer (opened from Leads or Bookings): the lead, and what it shows:
@@ -74,6 +76,7 @@ const leads = createSlice({
         s.items = payload.items;
         s.total = payload.total;
         s.pageSize = payload.pageSize;
+        s.sources = payload.sources ?? null;
       })
       .addCase(fetchLeads.rejected, (s, { payload, meta }) => {
         if (meta.aborted) return;
@@ -121,7 +124,16 @@ export const rescheduleBookingAdmin = thunk('adminBookings/reschedule', async ({
   if (leadId) dispatch(fetchLead(leadId));
   return res;
 });
-/** Open call times for the reschedule picker. */
+/**
+ * Admin books an open slot for someone (Bookings page). The lists, calendar and open times reload
+ * right away, without waiting for the live update.
+ */
+export const createBookingAdmin = thunk('adminBookings/create', async (fields, { dispatch }) => {
+  const res = await adminApi.createBooking(fields);
+  dispatch(refreshAfterEvent({ lead: res.lead }));
+  return res;
+});
+/** Open call times for the reschedule and new-booking pickers. */
 export const fetchBookingSlots = thunk('adminBookings/slots', (_, { signal }) => adminApi.getBookingSlots({ signal }));
 
 /** Calendar month: { month: 'YYYY-MM', from, to } (from/to = the first and last day shown in the grid). */

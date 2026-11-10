@@ -2,7 +2,8 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { sendChat } from '../api/chat.js';
 import { createLead } from '../api/leads.js';
 import { site } from '../content/site.js';
-import { formatWhen } from '../lib/calendar.js';
+import { getAttribution } from '../lib/attribution.js';
+import { detectTimeZone, formatWhen } from '../lib/calendar.js';
 
 // The website chatbot (components/ChatWidget.jsx). The conversation lives here only (the server
 // stores nothing) and is sent with every message. Open call times come from the leadForm slice
@@ -32,7 +33,7 @@ export const sendMessage = createAsyncThunk(
       .chat.messages.filter((m) => !m.local)
       .map(({ role, text: t }) => ({ role, text: t }));
     try {
-      return await sendChat(history, { signal });
+      return await sendChat(history, detectTimeZone(), { signal });
     } catch (err) {
       return rejectWithValue({ message: err.message || site.chat.error, text });
     }
@@ -46,7 +47,7 @@ export const bookFromChat = createAsyncThunk(
   async ({ prefill, values }, { getState, rejectWithValue, signal }) => {
     try {
       await createLead(
-        { ...prefill, ...values, source: 'chatbot', fillMs: Math.max(0, Date.now() - getState().chat.openedAt) },
+        { ...prefill, ...values, source: 'chatbot', attribution: getAttribution(), fillMs: Math.max(0, Date.now() - getState().chat.openedAt) },
         { signal },
       );
       return { firstName: values.firstName.trim(), meetingAt: values.meetingAt, timeZone: values.timeZone };

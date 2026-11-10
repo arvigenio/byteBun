@@ -6,11 +6,11 @@ import { fetchBookings, fetchLeads, fetchSecurity } from '../../store/adminDataS
 export function useLeads() {
   const dispatch = useDispatch();
   const state = useSelector((s) => s.adminLeads);
-  const { q, status, page } = state.query;
+  const { q, status, from, page } = state.query;
   useEffect(() => {
-    const p = dispatch(fetchLeads({ q, status, page }));
+    const p = dispatch(fetchLeads({ q, status, from, page }));
     return () => p.abort();
-  }, [dispatch, q, status, page]);
+  }, [dispatch, q, status, from, page]);
   return state;
 }
 

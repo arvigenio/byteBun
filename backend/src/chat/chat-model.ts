@@ -13,16 +13,38 @@ export interface ChatTurn {
   text: string;
 }
 
+/** A tool the model asked for, with its raw arguments. */
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/** A lookup the model asked for during this reply (check_availability), and what it got back. */
+export interface ToolRound {
+  call: ToolCall;
+  result: string;
+}
+
 export interface ModelReply {
   text: string;
-  /** A tool the model asked for (only open_booking_calendar today), with its raw arguments. */
-  call?: { name: string; args: Record<string, unknown> };
+  call?: ToolCall;
 }
 
 export interface ChatModel {
   /** False when no API key is configured: the chat then says it is offline. */
   readonly available: boolean;
-  reply(input: { system: string; turns: ChatTurn[]; tools: ChatTool[]; signal?: AbortSignal }): Promise<ModelReply>;
+  reply(input: {
+    /** The instructions: the same on every request, so they're cached. */
+    system: string;
+    /** Changes per request (the visitor's date and time zone); sent after `system`, not cached. */
+    context?: string;
+    turns: ChatTurn[];
+    /** Lookups already done for this reply, oldest first; they follow the last turn. */
+    rounds?: ToolRound[];
+    tools: ChatTool[];
+    signal?: AbortSignal;
+  }): Promise<ModelReply>;
 }
 
 export const CHAT_MODEL = Symbol('CHAT_MODEL');

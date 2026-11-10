@@ -1,7 +1,8 @@
 // Live updates for the admin site (Socket.IO; the Node.js counterpart of SignalR).
 //
 //   path: /api/realtime   (under /api, so the dev proxy and the reverse proxy already route it)
-//   events sent to admins: "lead.created", "lead.updated", "booking.changed"
+//   events sent to admins: "lead.created", "lead.updated", "booking.changed", "tasks.changed", ...
+//   (all of them: realtime/admin-events.ts)
 //
 // Only fully signed-in admins can connect: the handshake carries the browser's session cookie
 // and is checked exactly like an /api/admin request (role admin, authenticator, second factor,

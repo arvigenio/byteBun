@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
+import { navigate } from '../../lib/router.js';
 import { fetchLead, refreshAfterEvent } from '../../store/adminDataSlices.js';
 import { prospectUpdated } from '../../store/adminProspectsSlice.js';
 import { refreshSavedProspects } from '../../store/adminSavedProspectsSlice.js';
+import { refreshTasks } from '../../store/adminTasksSlice.js';
 
 // Live admin updates (backend/src/realtime/admin-realtime.gateway.ts, Socket.IO at /api/realtime).
 // The browser's session cookie authenticates the connection. On every event the lists, the
@@ -63,6 +65,15 @@ export function useAdminRealtime(me) {
     socket.on('prospects.updated', (e) => dispatch(prospectUpdated(e)));
     // Saved prospects or groups changed (by anyone): the Saved tab reloads what it has loaded.
     socket.on('prospects.saved.changed', () => dispatch(refreshSavedProspects()));
+    // Tasks changed (by anyone): the task board and an open task's page reload. When another admin
+    // just assigned a task to this admin, a toast says so (they are emailed too).
+    socket.on('tasks.changed', (e) => {
+      const a = e?.assigned;
+      if (a && meRef.current && a.to === meRef.current.email && a.by.email !== meRef.current.email) {
+        toast.info(`${a.by.name} assigned you a task`, { description: a.title, action: { label: 'Open', onClick: () => navigate(`/admin/tasks/${a.taskId}`) }, duration: 10_000 });
+      }
+      dispatch(refreshTasks());
+    });
 
     return () => {
       socket.removeAllListeners();

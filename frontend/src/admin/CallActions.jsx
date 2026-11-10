@@ -26,9 +26,62 @@ function NoteField({ register, error, hint }) {
   );
 }
 
+/**
+ * The open call times as buttons grouped by day (your time zone), a radio group bound to the
+ * form's `startsAt`. `slots` comes from useOpenSlotDays. The current time (when moving a call) is
+ * shown struck through.
+ */
+export function SlotPicker({ legend, slots, register, selected, error, className = 'max-h-72' }) {
+  const { days, status, error: loadError, retry } = slots;
+  return (
+    <fieldset className="mb-4">
+      <legend className="mb-2 text-sm font-semibold text-midnight-plum">{legend}</legend>
+      {status === 'loading' && !days.length ? (
+        <Spinner label="Loading open times…" />
+      ) : status === 'error' ? (
+        <Notice tone="danger">
+          {loadError || 'Could not load the open times.'}{' '}
+          <AdminButton variant="link" onClick={retry}>
+            Try again
+          </AdminButton>
+        </Notice>
+      ) : !days.length ? (
+        <p className="text-sm text-muted">No open times right now.</p>
+      ) : (
+        <div className={`${className} space-y-3 overflow-y-auto rounded-card border border-line p-3`}>
+          {days.map(([day, times]) => (
+            <div key={day}>
+              <div className="mb-1.5 text-xs font-bold tracking-wider text-soft-violet uppercase">{day}</div>
+              <div className="flex flex-wrap gap-2">
+                {times.map((s) => (
+                  <label
+                    key={s.iso}
+                    className={`cursor-pointer rounded-btn border-2 px-3 py-1.5 text-sm font-semibold transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-soft-violet ${
+                      s.current
+                        ? 'cursor-not-allowed border-line bg-lavender-mist text-muted line-through'
+                        : selected === s.iso
+                          ? 'border-byte-purple bg-byte-purple text-cream-dough'
+                          : 'border-line bg-cream-dough text-midnight-plum hover:border-soft-violet'
+                    }`}
+                    title={s.current ? 'The current time' : undefined}
+                  >
+                    <input type="radio" value={s.iso} disabled={s.current} className="sr-only" {...register('startsAt')} />
+                    {s.time}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <p className="mt-1.5 text-[13px] font-medium text-danger">{error}</p>}
+    </fieldset>
+  );
+}
+
 /** Move the lead's call to another open time. */
 export function ReschedulePanel({ lead }) {
-  const { form, days, selected, slotsStatus, slotsError, retrySlots, onSubmit, error, back } = useReschedule(lead);
+  const { form, slots, selected, onSubmit, error, back } = useReschedule(lead);
   const { register, formState } = form;
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -37,48 +90,7 @@ export function ReschedulePanel({ lead }) {
       <CurrentCall lead={lead} />
       {error && <Notice tone="danger">{error}</Notice>}
 
-      <fieldset className="mb-4">
-        <legend className="mb-2 text-sm font-semibold text-midnight-plum">New time</legend>
-        {slotsStatus === 'loading' && !days.length ? (
-          <Spinner label="Loading open times…" />
-        ) : slotsStatus === 'error' ? (
-          <Notice tone="danger">
-            {slotsError || 'Could not load the open times.'}{' '}
-            <AdminButton variant="link" onClick={retrySlots}>
-              Try again
-            </AdminButton>
-          </Notice>
-        ) : !days.length ? (
-          <p className="text-sm text-muted">No open times right now.</p>
-        ) : (
-          <div className="max-h-72 space-y-3 overflow-y-auto rounded-card border border-line p-3">
-            {days.map(([day, times]) => (
-              <div key={day}>
-                <div className="mb-1.5 text-xs font-bold tracking-wider text-soft-violet uppercase">{day}</div>
-                <div className="flex flex-wrap gap-2">
-                  {times.map((s) => (
-                    <label
-                      key={s.iso}
-                      className={`cursor-pointer rounded-btn border-2 px-3 py-1.5 text-sm font-semibold transition-colors ${
-                        s.current
-                          ? 'cursor-not-allowed border-line bg-lavender-mist text-muted line-through'
-                          : selected === s.iso
-                            ? 'border-byte-purple bg-byte-purple text-cream-dough'
-                            : 'border-line bg-cream-dough text-midnight-plum hover:border-soft-violet'
-                      }`}
-                      title={s.current ? 'The current time' : undefined}
-                    >
-                      <input type="radio" value={s.iso} disabled={s.current} className="sr-only" {...register('startsAt')} />
-                      {s.time}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {formState.errors.startsAt && <p className="mt-1.5 text-[13px] font-medium text-danger">{formState.errors.startsAt.message}</p>}
-      </fieldset>
+      <SlotPicker legend="New time" slots={slots} register={register} selected={selected} error={formState.errors.startsAt?.message} />
 
       <NoteField register={register} error={formState.errors.note?.message} hint="Shown to the lead in the email, e.g. why the time changed." />
       <div className="flex flex-wrap gap-3">

@@ -12,6 +12,14 @@ export interface LeadSummary {
   businessName: string | null;
 }
 
+export interface TaskAssigned {
+  taskId: number;
+  title: string;
+  /** The admin it was assigned to (email). */
+  to: string;
+  by: { name: string; email: string };
+}
+
 export type BookingChangeKind = 'booked' | 'rescheduled' | 'cancelled';
 
 export interface BookingChange {
@@ -50,6 +58,14 @@ export class AdminEvents {
   /** Prospecting: saved prospects or their groups changed (the Saved tab reloads). */
   savedProspectsChanged() {
     this.realtime.emit('prospects.saved.changed', {});
+  }
+
+  /**
+   * Task board: a task or subtask changed (the Tasks pages reload). `assigned` is set when the
+   * change assigned a task to another admin, so that admin's browser can say so.
+   */
+  tasksChanged(assigned?: TaskAssigned) {
+    this.realtime.emit('tasks.changed', assigned ? { assigned } : {});
   }
 
   bookingChanged(change: BookingChange) {

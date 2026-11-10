@@ -17,6 +17,7 @@ import {
   savedProspectSelected,
   updateSavedProspect,
 } from '../store/adminSavedProspectsSlice.js';
+import { useConfirm } from './dialogs.jsx';
 import { Chance, EmailCell, ExternalLink, SocialCell, WebsiteCell } from './prospectCells.jsx';
 import { AdminButton, Field, Notice, Panel, SelectInput, Spinner, TextInput } from './ui.jsx';
 
@@ -267,6 +268,7 @@ function SavedDetails({ p }) {
 
 function GroupActions({ group }) {
   const dispatch = useDispatch();
+  const confirm = useConfirm();
   const rename = async () => {
     const name = window.prompt('New name for the group:', group.name)?.trim();
     if (!name || name === group.name) return;
@@ -279,7 +281,12 @@ function GroupActions({ group }) {
     }
   };
   const remove = async () => {
-    if (!window.confirm(`Delete the group “${group.name}”? Its ${group.count} prospect${group.count === 1 ? '' : 's'} stay saved, without a group.`)) return;
+    const sure = await confirm({
+      title: 'Delete this group?',
+      body: `“${group.name}” will be deleted. Its ${group.count} prospect${group.count === 1 ? ' stays' : 's stay'} saved, without a group.`,
+      action: 'Delete group',
+    });
+    if (!sure) return;
     try {
       await dispatch(deleteProspectGroup(group.id)).unwrap();
       dispatch(fetchSavedProspects('all'));

@@ -28,7 +28,19 @@ model Lead {
   goalsOther   String?  @map("goals_other") @db.VarChar(200)
   features     String?  @db.VarChar(1000)
   message      String?  @db.VarChar(2000)
+  // Which button opened the form ("hero", "final-cta", ...), or "chatbot" for the chat calendar.
   source       String   @default("website") @db.VarChar(50)
+  // Where the booking came from (src/leads/attribution.ts). channel: web_form | chatbot.
+  channel      String   @default("web_form") @db.VarChar(20)
+  // How they reached the site: social | search | ads | email | referral | direct; null for leads
+  // from before this was recorded. originDetail: the platform or site ("Facebook", "Google").
+  origin       String?  @db.VarChar(20)
+  originDetail String?  @map("origin_detail") @db.VarChar(80)
+  utmSource    String?  @map("utm_source") @db.VarChar(100)
+  utmMedium    String?  @map("utm_medium") @db.VarChar(100)
+  utmCampaign  String?  @map("utm_campaign") @db.VarChar(100)
+  referrerHost String?  @map("referrer_host") @db.VarChar(253)
+  landingPath  String?  @map("landing_path") @db.VarChar(300)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   status       String   @default("new") @db.VarChar(30)
   // Random value behind the lead's reschedule/cancel link (src/booking/manage-link.ts). The link is
@@ -240,4 +252,44 @@ model SecurityCounter {
   prevSuppressed Int      @default(0) @map("prev_suppressed")
 
   @@map("security_counters")
+}
+
+// ---------------------------------------------------------------- admin task board
+// The admin Tasks page (src/tasks): a kanban board of tasks; each task has its own board of subtasks.
+
+model AdminTask {
+  id          Int            @id @default(autoincrement())
+  title       String         @db.VarChar(200)
+  description String?        @db.VarChar(2000)
+  // todo | in_progress | done (src/tasks/tasks.schema.ts)
+  status      String         @default("todo") @db.VarChar(20)
+  // Order inside its column, from 0.
+  position    Int            @default(0)
+  createdBy   String         @map("created_by") @db.VarChar(254)
+  // The admin it is assigned to (an email from src/auth/admins.ts), or null for nobody yet.
+  assignedTo  String?        @map("assigned_to") @db.VarChar(254)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  // When it was moved to Done (cleared when it leaves Done).
+  completedAt DateTime?      @map("completed_at") @db.Timestamptz(3)
+  subtasks    AdminSubtask[]
+
+  @@index([status, position], map: "ix_admin_tasks_status_position")
+  @@map("admin_tasks")
+}
+
+model AdminSubtask {
+  id        Int       @id @default(autoincrement())
+  // Deleting a task deletes its subtasks.
+  taskId    Int       @map("task_id")
+  task      AdminTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title     String    @db.VarChar(200)
+  // todo | in_progress | done: its column on the task's own board (same states as a task).
+  status    String    @default("todo") @db.VarChar(20)
+  // Order inside its column, from 0.
+  position  Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([taskId], map: "ix_admin_subtasks_task_id")
+  @@map("admin_subtasks")
 }

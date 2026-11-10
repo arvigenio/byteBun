@@ -10,7 +10,7 @@ import { ChatService } from './chat.service';
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
 
-  // POST /api/chat { messages: [{ role: 'user' | 'assistant', text }] }
+  // POST /api/chat { messages: [{ role: 'user' | 'assistant', text }], timeZone?: IANA name }
   //   -> 200 { reply, booking?: BookingPrefill, offline?: true }
   // 400 for an empty or oversized message, 429 when rate limited. Nothing is stored.
   @Post()

@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { createLead } from '../api/leads.js';
 import { getSlots } from '../api/booking.js';
+import { getAttribution } from '../lib/attribution.js';
 
 // State for the lead page (/get-started). Field values, steps, and per-field validation live in
 // react-hook-form (hooks/useLeadFormController.js); this slice owns where the visitor came
@@ -30,7 +31,7 @@ export const submitLead = createAsyncThunk(
   'leadForm/submit',
   async (values, { getState, rejectWithValue, signal }) => {
     try {
-      return await createLead({ ...values, source: getState().leadForm.source }, { signal });
+      return await createLead({ ...values, source: getState().leadForm.source, attribution: getAttribution() }, { signal });
     } catch (err) {
       // Keep the rejected payload serializable (ApiError is a class instance).
       return rejectWithValue({ message: err.message, fields: err.fields ?? {} });

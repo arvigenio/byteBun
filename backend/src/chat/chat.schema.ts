@@ -26,6 +26,8 @@ export const chatSchema = yup.object({
     .min(1, 'Please type a message.')
     .max(200, 'This chat is too long. Please refresh the page to start a new one.')
     .test('ends-with-user', 'Please type a message.', (list) => list?.[list.length - 1]?.role === 'user'),
+  // The visitor's IANA time zone, for availability answers. An unknown one is ignored (Manila time).
+  timeZone: yup.string().trim().max(64).optional(),
 });
 
 export type ChatInput = yup.InferType<typeof chatSchema>;

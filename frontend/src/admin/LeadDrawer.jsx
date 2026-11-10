@@ -1,8 +1,12 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { useLeadDrawer, useLeadEditForm } from '../hooks/admin/useLeadDrawer.js';
 import { drawerModeChanged, editCancelled, editStarted, leadClosed, updateLead } from '../store/adminDataSlices.js';
+import { channelLabel, originLabel } from '../lib/leadOrigin.js';
 import { CancelPanel, ReschedulePanel } from './CallActions.jsx';
-import { AdminButton, Badge, Field, formatDateTime, Notice, SelectInput, Spinner, TextInput } from './ui.jsx';
+
+// Where-they-came-from details that most leads won't have: left out instead of showing "—".
+const HIDE_WHEN_EMPTY = new Set(['Campaign', 'Referring site', 'Landing page', 'Form opened from']);
+import { AdminButton, Badge, Checkboxes, Field, formatDateTime, Notice, SelectInput, Spinner, TextInput } from './ui.jsx';
 
 export const statusTone = { new: 'gold', contacted: 'neutral', qualified: 'neutral', won: 'teal', lost: 'neutral', spam: 'danger' };
 
@@ -79,7 +83,12 @@ function LeadDetails({ lead }) {
     ['Features', lead.features.join('\n')],
     ['Message', lead.message],
     ['Call', call],
-    ['Source', lead.source],
+    ['Booked via', channelLabel(lead.channel)],
+    ['Found us through', originLabel(lead)],
+    ['Campaign', [lead.utmCampaign, lead.utmSource && `source: ${lead.utmSource}`, lead.utmMedium && `medium: ${lead.utmMedium}`].filter(Boolean).join('\n')],
+    ['Referring site', lead.referrerHost],
+    ['Landing page', lead.landingPath],
+    ['Form opened from', lead.channel === 'web_form' ? lead.source : null],
     ['Received', formatDateTime(lead.createdAt)],
   ];
   return (
@@ -110,7 +119,7 @@ function LeadDetails({ lead }) {
         </div>
       )}
       <dl className="divide-y divide-line border-y border-line">
-        {rows.map(([k, v]) => (
+        {rows.filter(([k, v]) => v || !HIDE_WHEN_EMPTY.has(k)).map(([k, v]) => (
           <div key={k} className="grid grid-cols-[96px_1fr] gap-3 py-2.5 text-sm">
             <dt className="font-semibold text-soft-violet">{k}</dt>
             <dd className="break-words whitespace-pre-wrap text-midnight-plum">{v || '—'}</dd>
@@ -192,19 +201,3 @@ function LeadEditForm({ lead, onCancel }) {
   );
 }
 
-function Checkboxes({ label, name, items, register, error }) {
-  return (
-    <fieldset className="mb-4">
-      <legend className="mb-2 text-sm font-semibold text-midnight-plum">{label}</legend>
-      <div className="grid grid-cols-2 gap-2 mobile:grid-cols-1">
-        {items.map((it) => (
-          <label key={it.key} className="flex cursor-pointer items-start gap-2 rounded-btn border border-line px-3 py-2 text-sm text-midnight-plum has-checked:border-soft-violet has-checked:bg-lavender-mist">
-            <input type="checkbox" value={it.key} className="mt-0.5 size-4 accent-byte-purple" {...register(name)} />
-            {it.label}
-          </label>
-        ))}
-      </div>
-      {error && <p className="mt-1.5 text-[13px] font-medium text-danger">{error}</p>}
-    </fieldset>
-  );
-}

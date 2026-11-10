@@ -31,4 +31,11 @@ export class BookingService {
       };
     });
   }
+
+  /** The same, as dates: every call time in the window (`all`) and the ones still free (`open`). */
+  async openSlots(): Promise<{ all: Date[]; open: Date[] }> {
+    const { slots, taken } = await this.listSlots();
+    const booked = new Set(taken);
+    return { all: slots.map((s) => new Date(s)), open: slots.filter((s) => !booked.has(s)).map((s) => new Date(s)) };
+  }
 }

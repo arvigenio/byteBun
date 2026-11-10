@@ -23,9 +23,12 @@ export const savedCodesSchema = yup.object({
 
 // Mirrors LEAD_STATUSES in backend/src/admin/admin-leads.ts.
 export const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'won', 'lost', 'spam'];
+// The "Came from" filter. Mirrors LEAD_FROM in backend/src/admin/admin-leads.ts.
+export const LEAD_FROM_KEYS = ['web_form', 'chatbot', 'admin', 'social', 'search', 'ads', 'email', 'referral', 'direct', 'unknown'];
 export const leadFilterSchema = yup.object({
   q: yup.string().trim().max(100, 'Search is too long.'),
   status: yup.string().oneOf(['', ...LEAD_STATUSES]),
+  from: yup.string().oneOf(['', ...LEAD_FROM_KEYS]),
 });
 
 // Edit a lead (admin). Mirrors updateSchema in backend/src/admin/admin-leads.ts: same limits
@@ -50,8 +53,9 @@ export const leadEditSchema = yup.object({
     .max(40, 'Phone number is too long.')
     .matches(/^[0-9+()\-.\s]{6,40}$/, { message: 'Please enter a valid phone number, or leave it empty.', excludeEmptyString: true }),
   businessName: yup.string().transform(emptyToNull).nullable().trim().max(160, 'Business name is too long (160 characters max).'),
-  businessType: yup.string().trim().required('Please enter a type of business.').max(80, 'Business type is too long.'),
-  goals: yup.array(yup.string().required()).min(1, 'Please choose at least one goal.'),
+  // May be empty: calls booked by an admin often start without a type or goals.
+  businessType: yup.string().trim().max(80, 'Business type is too long.'),
+  goals: yup.array(yup.string().required()),
   goalsOther: yup
     .string()
     .transform(emptyToNull)
@@ -72,6 +76,32 @@ export const adminRescheduleSchema = yup.object({
   note,
 });
 export const adminCancelSchema = yup.object({ note });
+
+// An admin books a call for someone (Bookings page). Mirrors adminBookingSchema in
+// backend/src/leads/lead.schema.ts: only the name, email and time are needed.
+export const ORIGIN_KEYS = ['social', 'search', 'ads', 'email', 'referral', 'direct'];
+export const adminBookingSchema = yup.object({
+  firstName: leadEditSchema.fields.firstName,
+  lastName: leadEditSchema.fields.lastName,
+  email: yup
+    .string()
+    .trim()
+    .lowercase()
+    .required('Please enter their email address: the confirmation goes there.')
+    .max(254, 'Email is too long.')
+    .email('Please enter a valid email address, like name@example.com.'),
+  phone: leadEditSchema.fields.phone,
+  businessName: leadEditSchema.fields.businessName,
+  businessType: yup.string().transform(emptyToNull).nullable().trim().max(80, 'Business type is too long (80 characters max).'),
+  origin: yup.string().transform(emptyToNull).nullable().oneOf([...ORIGIN_KEYS, null], 'Choose one of the listed options.'),
+  // What they want (optional): the lead page's goals and features.
+  goals: yup.array(yup.string().required()).default([]),
+  goalsOther: leadEditSchema.fields.goalsOther,
+  features: yup.array(yup.string().required()).default([]),
+  message: leadEditSchema.fields.message,
+  startsAt: yup.string().required('Choose a time for the call.'),
+  timeZone: yup.string().trim().required('Choose their time zone.'),
+});
 
 // Prospecting search. Mirrors searchSchema in backend/src/prospects/prospects.controller.ts.
 const PROSPECT_TEXT = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} &'’.,()/-]*$/u;
@@ -103,4 +133,23 @@ export const prospectGroupSchema = yup.object({
 });
 export const savedProspectNoteSchema = yup.object({
   note: yup.string().trim().max(2000, 'Note is too long (2000 characters max).'),
+});
+
+// Task board. Mirrors backend/src/tasks/tasks.schema.ts.
+export const taskSchema = yup.object({
+  title: yup.string().trim().required('Enter a title for the task.').max(200, 'Title is too long (200 characters max).'),
+  description: yup.string().trim().max(2000, 'Description is too long (2000 characters max).'),
+});
+/** The task dialog: title, description, its column (state) and who it is assigned to ('' = nobody). */
+export const TASK_STATUSES = ['todo', 'in_progress', 'done'];
+export const taskDialogSchema = taskSchema.shape({
+  status: yup.string().oneOf(TASK_STATUSES, 'Pick a state.').required('Pick a state.'),
+  assignedTo: yup.string().trim(),
+});
+export const subtaskSchema = yup.object({
+  title: yup.string().trim().required('Enter the subtask.').max(200, 'Subtask is too long (200 characters max).'),
+});
+/** The subtask dialog: its name and its column (state) on the task's own board. */
+export const subtaskDialogSchema = subtaskSchema.shape({
+  status: yup.string().oneOf(TASK_STATUSES, 'Pick a state.').required('Pick a state.'),
 });

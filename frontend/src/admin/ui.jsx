@@ -5,6 +5,7 @@ const BTN = {
   accent: 'border-transparent bg-bun-orange text-midnight-plum hover:bg-bun-orange-hover',
   outline: 'border-line bg-cream-dough text-byte-purple hover:bg-lavender-mist',
   danger: 'border-danger bg-cream-dough text-danger hover:bg-lavender-mist',
+  dangerSolid: 'border-danger bg-danger text-cream-dough hover:opacity-90', // the "yes, delete" in a confirm
   link: 'border-transparent bg-transparent px-0 text-soft-violet underline-offset-4 hover:underline min-h-0',
 };
 
@@ -40,6 +41,24 @@ export function Field({ label, hint, error, id, children }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** A group of checkboxes for one array field (react-hook-form `register`): items [{ key, label }]. */
+export function Checkboxes({ label, name, items, register, error }) {
+  return (
+    <fieldset className="mb-4">
+      <legend className="mb-2 text-sm font-semibold text-midnight-plum">{label}</legend>
+      <div className="grid grid-cols-2 gap-2 mobile:grid-cols-1">
+        {items.map((it) => (
+          <label key={it.key} className="flex cursor-pointer items-start gap-2 rounded-btn border border-line px-3 py-2 text-sm text-midnight-plum has-checked:border-soft-violet has-checked:bg-lavender-mist">
+            <input type="checkbox" value={it.key} className="mt-0.5 size-4 accent-byte-purple" {...register(name)} />
+            {it.label}
+          </label>
+        ))}
+      </div>
+      {error && <p className="mt-1.5 text-[13px] font-medium text-danger">{error}</p>}
+    </fieldset>
   );
 }
 

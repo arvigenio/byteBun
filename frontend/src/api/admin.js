@@ -9,7 +9,7 @@ export const getLeadOptions = (config) => http.get('/admin/leads/options', confi
 // Partial update: only the fields given change. -> the updated lead
 export const updateLead = (id, fields) => http.patch(`/admin/leads/${id}`, fields);
 /** A plain GET download (the browser sends the session cookie). */
-export const leadsExportUrl = ({ q = '', status = '' } = {}) => `/api/admin/leads/export.csv?${new URLSearchParams({ q, status })}`;
+export const leadsExportUrl = ({ q = '', status = '', from = '' } = {}) => `/api/admin/leads/export.csv?${new URLSearchParams({ q, status, from })}`;
 
 export const listBookings = (when, config) => http.get('/admin/bookings', { ...config, params: { when } });
 /** Calendar: every booking from <= startsAt < to (ISO strings, at most 62 days). */
@@ -18,6 +18,11 @@ export const listBookingsBetween = (from, to, config) => http.get('/admin/bookin
 export const getBookingSlots = (config) => http.get('/admin/bookings/slots', config);
 // The lead and the other admins are emailed. `note` (optional) is shown to the lead.
 export const rescheduleBooking = (id, { startsAt, note }) => http.post(`/admin/bookings/${id}/reschedule`, { startsAt, note });
+/**
+ * Book an open slot for someone: { firstName, lastName, email, phone?, businessName?, businessType?,
+ * origin?, message?, startsAt, timeZone? } -> { lead, booking }. They get the usual confirmation.
+ */
+export const createBooking = (fields) => http.post('/admin/bookings', fields);
 export const cancelBooking = (id, note) => http.post(`/admin/bookings/${id}/cancel`, { note });
 
 export const getSecurity = (config) => http.get('/admin/security', config);
@@ -44,3 +49,17 @@ export const saveProspects = ({ searchId, itemIds, groupId }) => http.post('/adm
 /** Partial: { groupId?, note? } */
 export const updateSavedProspect = (id, fields) => http.patch(`/admin/prospects/saved/${id}`, fields);
 export const removeSavedProspect = (id) => http.delete(`/admin/prospects/saved/${id}`);
+
+// Task board (backend/src/tasks/tasks.controller.ts). Changes answer with the changed task.
+export const listTasks = (config) => http.get('/admin/tasks', config);
+/** { title, description?, status?, assignedTo? } (assignedTo: an admin's email, from listTasks().admins) */
+export const createTask = (fields) => http.post('/admin/tasks', fields);
+/** Partial: { title?, description?, status?, position?, assignedTo? } (status + position move it; assignedTo null = nobody). */
+export const updateTask = (id, fields) => http.patch(`/admin/tasks/${id}`, fields);
+export const deleteTask = (id) => http.delete(`/admin/tasks/${id}`);
+/** Deletes every task; the server refuses (409) unless everything is done. */
+export const clearTasks = () => http.delete('/admin/tasks');
+export const addSubtask = (taskId, title) => http.post(`/admin/tasks/${taskId}/subtasks`, { title });
+/** Partial: { title?, status?, position? } (status + position move it on the task's own board). */
+export const updateSubtask = (taskId, id, fields) => http.patch(`/admin/tasks/${taskId}/subtasks/${id}`, fields);
+export const deleteSubtask = (taskId, id) => http.delete(`/admin/tasks/${taskId}/subtasks/${id}`);

@@ -149,7 +149,7 @@ describe('admin area, signed in', () => {
     assert.equal((await laptop.get('/api/admin/me')).status, 401);
   });
 
-  it('leads: edit details (partial updates, same rules as the public form)', async () => {
+  it('leads: edit details (partial updates, the public form rules, goals and type may be empty)', async () => {
     const { res } = await submitLead(t.server);
     const id = res.body.id as number;
     const b = browser(t.server);
@@ -188,9 +188,14 @@ describe('admin area, signed in', () => {
     assert.ok(edited.body.booking, 'the booked call is untouched');
 
     // Validation, with per-field messages.
-    const bad = await b.patch(`/api/admin/leads/${id}`, { email: 'not-an-email', firstName: '   ', goals: [], phone: 'abc' });
+    const bad = await b.patch(`/api/admin/leads/${id}`, { email: 'not-an-email', firstName: '   ', phone: 'abc', businessType: 'x'.repeat(81) });
     assert.equal(bad.status, 400);
-    assert.deepEqual(Object.keys(bad.body.fields).sort(), ['email', 'firstName', 'goals', 'phone']);
+    assert.deepEqual(Object.keys(bad.body.fields).sort(), ['businessType', 'email', 'firstName', 'phone']);
+    // Goals and the business type may be left empty (calls booked by an admin start without them).
+    const emptied = await b.patch(`/api/admin/leads/${id}`, { goals: [], businessType: '' });
+    assert.equal(emptied.status, 200, JSON.stringify(emptied.body));
+    assert.deepEqual(emptied.body.goalKeys, []);
+    assert.equal(emptied.body.businessType, '');
     const otherWithoutText = await b.patch(`/api/admin/leads/${id}`, { goals: ['other'] });
     assert.equal(otherWithoutText.status, 400);
     assert.ok(otherWithoutText.body.fields.goalsOther);

@@ -16,6 +16,7 @@ import { LeadEmailsModule } from './leads/lead-emails.module';
 import { LeadsModule } from './leads/leads.module';
 import { ProspectsModule } from './prospects/prospects.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { TasksModule } from './tasks/tasks.module';
 
 // Every route is under /api (see app.ts). New integrations (payments, chatbot, ...) are new
 // modules added here. Admin sign-in itself (/api/auth/*) is Better Auth, mounted in app.ts.
@@ -32,6 +33,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     LeadsModule,
     AdminModule,
     ProspectsModule,
+    TasksModule,
     ChatModule,
   ],
   providers: [

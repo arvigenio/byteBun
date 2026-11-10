@@ -7,5 +7,6 @@ import { LeadsService } from './leads.service';
   imports: [IntegrationsModule],
   controllers: [LeadsController],
   providers: [LeadsService],
+  exports: [LeadsService], // the admin Bookings page books calls too (admin/admin-leads.ts)
 })
 export class LeadsModule {}

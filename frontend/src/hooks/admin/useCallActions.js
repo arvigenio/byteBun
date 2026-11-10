@@ -27,20 +27,27 @@ function useSubmit(form, run, success) {
   return { onSubmit, error, back: () => dispatch(drawerModeChanged('view')) };
 }
 
-/** Reschedule panel: the open times grouped by day (your time zone), plus an optional note to the lead. */
-export function useReschedule(lead) {
+/** Every call time in the booking window and the booked ones (loaded on mount): { items, taken, status, error, retry }. */
+export function useOpenSlots() {
   const dispatch = useDispatch();
   const slots = useSelector((s) => s.adminBookings.slots);
-  const form = useAdminForm(adminRescheduleSchema, { startsAt: '', note: '' });
-  const selected = form.watch('startsAt');
 
   useEffect(() => {
     dispatch(fetchBookingSlots());
   }, [dispatch]);
 
+  return { ...slots, retry: () => dispatch(fetchBookingSlots()) };
+}
+
+/**
+ * The open call times (loaded on mount), grouped by day in your time zone: [[day, [{ iso, time, current }]]].
+ * `current` (an ISO time, e.g. the call being moved) is listed too, marked as current.
+ */
+export function useOpenSlotDays(current = '') {
+  const slots = useOpenSlots();
+
   const days = useMemo(() => {
     const taken = new Set(slots.taken);
-    const current = lead.booking?.startsAt ? new Date(lead.booking.startsAt).toISOString() : '';
     const out = new Map();
     for (const iso of slots.items) {
       if (taken.has(iso) && iso !== current) continue;
@@ -49,14 +56,23 @@ export function useReschedule(lead) {
       out.get(key).push({ iso, time: timeLabel(iso), current: iso === current });
     }
     return [...out.entries()];
-  }, [slots.items, slots.taken, lead.booking?.startsAt]);
+  }, [slots.items, slots.taken, current]);
+
+  return { days, status: slots.status, error: slots.error, retry: slots.retry };
+}
+
+/** Reschedule panel: the open times grouped by day (your time zone), plus an optional note to the lead. */
+export function useReschedule(lead) {
+  const form = useAdminForm(adminRescheduleSchema, { startsAt: '', note: '' });
+  const selected = form.watch('startsAt');
+  const slots = useOpenSlotDays(lead.booking?.startsAt ? new Date(lead.booking.startsAt).toISOString() : '');
 
   const submit = useSubmit(
     form,
     (v) => rescheduleBookingAdmin({ bookingId: lead.booking.id, leadId: lead.id, startsAt: v.startsAt, note: v.note }),
     (v) => `Call moved to ${fmt(v.startsAt)}`,
   );
-  return { form, days, selected, slotsStatus: slots.status, slotsError: slots.error, retrySlots: () => dispatch(fetchBookingSlots()), ...submit };
+  return { form, selected, slots, ...submit };
 }
 
 export function useCancelCall(lead) {

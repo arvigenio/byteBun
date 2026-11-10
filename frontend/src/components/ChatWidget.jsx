@@ -195,7 +195,7 @@ export function ChatWidget() {
                       )}
                       {m.offline && (
                         <a
-                          href={leadHref('chatbot')}
+                          href={leadHref('chat-link')}
                           onClick={onRouteLinkClick}
                           className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-btn bg-linear-to-r from-bun-orange to-honey-gold px-4 text-sm font-semibold text-midnight-plum shadow-md transition-transform motion-safe:hover:-translate-y-0.5"
                         >

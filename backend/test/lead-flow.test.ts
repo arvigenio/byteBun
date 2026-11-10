@@ -167,6 +167,119 @@ describe('admin reschedule and cancel', () => {
   });
 });
 
+describe('admin books a call (Bookings page)', () => {
+  const rosa = (startsAt: string, extra: Record<string, unknown> = {}) => ({
+    firstName: 'Rosa',
+    lastName: 'Cruz',
+    email: 'rosa.cruz@example.com',
+    phone: '+63 917 555 0101',
+    businessName: 'Cruz Bakery',
+    businessType: 'Bakery',
+    origin: 'social',
+    goals: ['more-bookings', 'other'],
+    goalsOther: 'Take cake orders online',
+    features: ['online-booking'],
+    message: 'Called the office; wants online ordering.',
+    startsAt,
+    timeZone: 'Asia/Manila',
+    ...extra,
+  });
+
+  it('saves the lead and call, emails the client and only the OTHER admin, and takes the slot', async () => {
+    const b = browser(t.server);
+    await enroll(b, JOSUE);
+    await settle();
+    outbox.length = 0;
+    const slot = (await freeSlots())[0];
+
+    const res = await b.post('/api/admin/bookings', rosa(slot));
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(new Date(res.body.booking.startsAt).toISOString(), slot);
+    const lead = await t.prisma.lead.findUniqueOrThrow({ where: { id: res.body.lead.id }, include: { booking: true } });
+    assert.equal(lead.channel, 'admin');
+    assert.equal(lead.source, 'admin');
+    assert.equal(lead.origin, 'social');
+    assert.equal(lead.businessType, 'Bakery');
+    assert.equal(lead.message, 'Called the office; wants online ordering.');
+    assert.deepEqual(JSON.parse(lead.goals!), ['more-bookings', 'other']);
+    assert.equal(lead.goalsOther, 'Take cake orders online');
+    assert.deepEqual(JSON.parse(lead.features!), ['online-booking']);
+    assert.equal(lead.booking!.timeZone, 'Asia/Manila');
+    assert.ok(lead.booking!.reminderAt, 'reminder planned, as for any booking');
+    assert.ok((await request(t.server).get('/api/booking/slots')).body.taken.includes(slot), 'slot taken for the public form too (cache cleared)');
+
+    const toClient = await waitForMail((m) => isTo('rosa.cruz@example.com')(m) && m.subject.startsWith('Rosa, your free consultation is confirmed for '));
+    assert.match(toClient.text, /As agreed, we have booked your free consultation/);
+    assert.match(toClient.text, /our team booked a free call with you/);
+    assert.ok(toClient.html!.includes('/manage-booking#t='), 'their own reschedule/cancel link');
+    assert.ok(toClient.attachments?.some((a) => a.filename === 'invite.ics'));
+
+    const toAdmin = await waitForMail((m) => m.subject.startsWith('Josue Mapagdalita booked a call with Rosa Cruz (Cruz Bakery) for '));
+    assert.deepEqual(toAdmin.to, [ARVI], 'only the other admin');
+    assert.match(toAdmin.subject, /at \d{1,2}:\d{2} (AM|PM) \(PH time\)$/);
+    assert.match(toAdmin.text, /Booked by: Josue Mapagdalita \(admin site\)/);
+    assert.match(toAdmin.text, /Came from: Admin site · Social media/);
+    assert.match(toAdmin.text, /Goals: Get more appointments and bookings, Other: Take cake orders online/);
+    assert.match(toAdmin.text, /Message: Called the office; wants online ordering\./);
+    assert.doesNotMatch(toAdmin.text, /Form opened from/);
+    await settle();
+    assert.ok(!outbox.some((m) => m.subject.startsWith('New lead:')), 'no "New lead" email');
+    assert.ok(!mailsTo(JOSUE).some((m) => m.subject.includes('Rosa')), 'the admin who booked it is not emailed');
+
+    // It shows in the admin lists, and the "Came from" filter knows the channel.
+    const upcoming = await b.get('/api/admin/bookings?when=upcoming');
+    assert.ok(upcoming.body.items.some((x: any) => x.lead.id === lead.id));
+    const leads = await b.get('/api/admin/leads?from=admin');
+    assert.deepEqual(leads.body.items.map((x: any) => x.id), [lead.id]);
+    assert.equal(leads.body.sources.channels.admin, 1);
+  });
+
+  it('only the name, email and time are needed; the same rules as the lead page apply', async () => {
+    const b = browser(t.server);
+    await enroll(b, ARVI);
+    const [first, second] = await freeSlots();
+
+    const minimal = await b.post('/api/admin/bookings', { firstName: 'Lito', lastName: 'Reyes', email: 'lito@example.com', startsAt: first });
+    assert.equal(minimal.status, 201, JSON.stringify(minimal.body));
+    const lito = await t.prisma.lead.findUniqueOrThrow({ where: { id: minimal.body.lead.id }, include: { booking: true } });
+    assert.equal(lito.businessType, '');
+    assert.equal(lito.origin, null);
+    assert.deepEqual([lito.goals, lito.goalsOther, lito.features], ['[]', null, '[]']);
+    assert.equal(lito.booking!.timeZone, null);
+
+    const missing = await b.post('/api/admin/bookings', {});
+    assert.equal(missing.status, 400);
+    assert.deepEqual(Object.keys(missing.body.fields).sort(), ['email', 'firstName', 'lastName', 'startsAt']);
+    assert.ok((await b.post('/api/admin/bookings', rosa(second, { origin: 'billboard' }))).body.fields.origin);
+    assert.ok((await b.post('/api/admin/bookings', rosa(second, { goals: ['world-domination'] }))).body.fields.goals);
+    assert.ok((await b.post('/api/admin/bookings', rosa(second, { goals: ['other'], goalsOther: '' }))).body.fields.goalsOther, '"Other" needs a description');
+    assert.ok((await b.post('/api/admin/bookings', rosa(second, { features: ['teleportation'] }))).body.fields.features);
+    assert.ok((await b.post('/api/admin/bookings', rosa(second, { timeZone: 'Mars/Olympus' }))).body.fields.timeZone);
+
+    // Not an open slot: a time outside the call hours, or one already booked.
+    const offHours = await b.post('/api/admin/bookings', rosa('2030-01-01T03:15:00.000Z'));
+    assert.equal(offHours.status, 400);
+    assert.ok(offHours.body.fields.startsAt);
+    const taken = await b.post('/api/admin/bookings', rosa(first));
+    assert.equal(taken.status, 409);
+    assert.equal(taken.body.error, 'slot_taken');
+    assert.ok(taken.body.fields.startsAt);
+
+    // One upcoming call per email, whoever booked the first one.
+    const again = await b.post('/api/admin/bookings', { firstName: 'Lito', lastName: 'Reyes', email: 'LITO@example.com', startsAt: second });
+    assert.equal(again.status, 409);
+    assert.equal(again.body.error, 'already_booked');
+    assert.match(again.body.fields.email, /^lito@example\.com already has a call booked for .*Asia\/Manila.*Move that call from the Bookings page instead\.$/);
+    assert.equal(await t.prisma.booking.count(), 1);
+  });
+
+  it('a signed-out request cannot book', async () => {
+    const slot = (await freeSlots())[0];
+    assert.equal((await request(t.server).post('/api/admin/bookings').set('Origin', ORIGIN).send(rosa(slot))).status, 401);
+    assert.equal(await t.prisma.lead.count(), 0);
+  });
+});
+
 describe('memory cache', () => {
   it('serves repeat reads from memory and drops them on every change', async () => {
     await bookLead('Ana');
@@ -232,6 +345,17 @@ describe('live admin updates (Socket.IO)', () => {
     const updated = once<{ lead: { firstName: string } }>(admin, 'lead.updated');
     await b.patch(`/api/admin/leads/${lead.id}`, { firstName: 'Carlita' });
     assert.equal((await updated).lead.firstName, 'Carlita');
+
+    // A call booked by an admin: "booked", with who did it (their own browser skips the toast).
+    const booked = once<{ kind: string; by: string; actor: { email: string }; lead: { firstName: string }; startsAt: string }>(admin, 'booking.changed');
+    const slot = (await freeSlots())[0];
+    await b.post('/api/admin/bookings', { firstName: 'Dina', lastName: 'Lopez', email: 'dina@example.com', startsAt: slot });
+    const ev2 = await booked;
+    assert.equal(ev2.kind, 'booked');
+    assert.equal(ev2.by, 'admin');
+    assert.equal(ev2.actor.email, JOSUE);
+    assert.equal(ev2.lead.firstName, 'Dina');
+    assert.equal(ev2.startsAt, slot);
     admin.close();
   });
 });

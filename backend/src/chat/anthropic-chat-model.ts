@@ -15,16 +15,26 @@ export class AnthropicChatModel implements ChatModel {
     return !!this.client;
   }
 
-  async reply({ system, turns, tools, signal }: Parameters<ChatModel['reply']>[0]): Promise<ModelReply> {
+  async reply({ system, context, turns, rounds = [], tools, signal }: Parameters<ChatModel['reply']>[0]): Promise<ModelReply> {
     if (!this.client) throw new Error('Anthropic is not configured');
+    const messages: Anthropic.MessageParam[] = turns.map((t) => ({ role: t.role, content: t.text }));
+    // Each lookup: the model's tool call, then its result.
+    for (const { call, result } of rounds) {
+      messages.push({ role: 'assistant', content: [{ type: 'tool_use', id: call.id, name: call.name, input: call.args }] });
+      messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: call.id, content: result }] });
+    }
     const res = await this.client.messages.create(
       {
         model: this.cfg.model,
         max_tokens: 4000,
-        // The instructions and tools are the same on every request: cache them.
-        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+        // The instructions and tools are the same on every request: cache them. The context (today's
+        // date for the visitor) changes, so it comes after the cached part.
+        system: [
+          { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+          ...(context ? [{ type: 'text' as const, text: context }] : []),
+        ],
         tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parametersJsonSchema as Anthropic.Tool.InputSchema })),
-        messages: turns.map((t): Anthropic.MessageParam => ({ role: t.role, content: t.text })),
+        messages,
         // Short chat replies: low effort keeps them fast and cheap.
         output_config: { effort: 'low' },
       },
@@ -38,6 +48,6 @@ export class AnthropicChatModel implements ChatModel {
       .join('\n')
       .trim();
     const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-    return { text, ...(call && { call: { name: call.name, args: (call.input ?? {}) as Record<string, unknown> } }) };
+    return { text, ...(call && { call: { id: call.id, name: call.name, args: (call.input ?? {}) as Record<string, unknown> } }) };
   }
 }

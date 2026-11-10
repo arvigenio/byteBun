@@ -2,8 +2,8 @@
 //  To the lead (customer template): confirmation, reminder, rescheduled, cancelled. Each has
 //    "add to calendar" buttons (or an .ics that updates/removes the event) and their private
 //    reschedule/cancel link.
-//  To the admins (ALERT_EMAILS, admin template): new lead, and every reschedule/cancel (except to
-//    the admin who made it).
+//  To the admins (ALERT_EMAILS, admin template): new lead, and every booking, reschedule and cancel
+//    made from the admin site (except to the admin who made it).
 // Subjects are plain sentences that always name the client, e.g.
 //   "Maria, your free consultation is confirmed for Wed, Nov 18 at 7:30 PM"
 //   "Josue Mapagdalita moved Maria Santos's call to Wed, Nov 18 at 7:30 PM (PH time)"
@@ -17,6 +17,7 @@ import { ManageLinks } from '../booking/manage-link';
 import { APP_CONFIG, type AppConfig } from '../config/config';
 import { PrismaService } from '../database/prisma.service';
 import { logger } from '../logging/logger';
+import { ADMIN_CHANNEL, describeOrigin } from './attribution';
 import { callEvent, calendarLinks, callTimeParts, icsFile } from './call-calendar';
 import { featureLabel, goalLabel, OTHER_GOAL } from './lead-options';
 
@@ -41,6 +42,10 @@ export interface LeadForEmail {
   features: string | null;
   message: string | null;
   source: string;
+  channel: string;
+  origin: string | null;
+  originDetail: string | null;
+  utmCampaign: string | null;
   createdAt: Date;
   manageNonce: string | null;
 }
@@ -122,11 +127,17 @@ const leadMail = (ctx: LeadMailContext, subject: string, rendered: { html: strin
   attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }],
 });
 
-const LEAD_FOOTER = 'You are receiving this because you booked a free call at bytebuntech.com. Byte Bun Tech · Web and automation studio.';
+/** Booked by our team from the admin site (attribution.ts ADMIN_CHANNEL), not by the person themselves. */
+const bookedByTeam = (lead: Pick<LeadForEmail, 'channel'>) => lead.channel === ADMIN_CHANNEL;
+const leadFooter = (lead: Pick<LeadForEmail, 'channel'>) =>
+  bookedByTeam(lead)
+    ? 'You are receiving this because our team booked a free call with you. Byte Bun Tech · Web and automation studio.'
+    : 'You are receiving this because you booked a free call at bytebuntech.com. Byte Bun Tech · Web and automation studio.';
 
 export function confirmationMail(ctx: LeadMailContext): Mail {
   const { t, ev, event, join, calendar, manage } = leadMailBase(ctx);
   const business = ctx.lead.businessName ? ctx.lead.businessName : 'your business';
+  const where = `Times are shown in your time zone (${t.timeZone}).`;
   const rendered = renderEmail({
     audience: 'customer',
     preheader: `${t.long}. Add it to your calendar, or reschedule in one click.`,
@@ -134,12 +145,14 @@ export function confirmationMail(ctx: LeadMailContext): Mail {
     label: 'Booking confirmed',
     tone: 'success',
     title: `See you on ${t.weekday}`,
-    intro: [`Thanks for telling us about ${business}. Here are the details of your call. Times are shown in your time zone (${t.timeZone}).`],
+    intro: bookedByTeam(ctx.lead)
+      ? [`Thanks for getting in touch. As agreed, we have booked your free consultation. Here are the details of your call. ${where}`]
+      : [`Thanks for telling us about ${business}. Here are the details of your call. ${where}`],
     event,
     actions: [...join, calendar, manage],
     steps: WHAT_WE_COVER,
     outro: ['Questions before the call? Just reply to this email and a real person will answer.'],
-    footer: LEAD_FOOTER,
+    footer: leadFooter(ctx.lead),
   });
   return leadMail(ctx, `${ctx.lead.firstName}, your free consultation is confirmed for ${t.shortDate} at ${t.start}`, rendered, icsFile(ev));
 }
@@ -161,7 +174,7 @@ export function reminderMail(ctx: LeadMailContext, now = new Date()): Mail {
     actions: [...join, manage, calendar],
     steps: WHAT_WE_COVER,
     outro: ["Running late or something came up? Use the Reschedule button above, or reply to this email."],
-    footer: LEAD_FOOTER,
+    footer: leadFooter(ctx.lead),
   });
   return leadMail(ctx, `Reminder for ${ctx.lead.firstName}: your free consultation is ${when} at ${t.start}`, rendered, icsFile(ev));
 }
@@ -203,7 +216,7 @@ export function rescheduledMail(ctx: LeadMailContext, previous: { startsAt: Date
     callout: teamNote(src),
     actions: [...join, { ...calendar, note: 'Already added the old time? The attached invite.ics updates it. Or add the new time with a button above.' }, manage],
     outro: byTeam ? ['Questions? Just reply to this email and we will get back to you quickly.'] : ['If you did not make this change, reply to this email and we will sort it out.'],
-    footer: LEAD_FOOTER,
+    footer: leadFooter(ctx.lead),
   });
   return leadMail(
     ctx,
@@ -237,7 +250,7 @@ export function cancelledMail(ctx: LeadMailContext, src: ChangeSource = { by: 'l
     outro: byTeam
       ? ['Questions? Just reply to this email.', 'Opening the attached invite.ics removes the old time from your calendar.']
       : ['If you did not cancel this, reply to this email and we will sort it out.', 'Opening the attached invite.ics removes the call from your calendar.'],
-    footer: LEAD_FOOTER,
+    footer: leadFooter(ctx.lead),
   });
   return {
     to: ctx.lead.email,
@@ -263,15 +276,35 @@ const leadDetails = (lead: LeadForEmail): [string, string][] => {
     ['Email', lead.email],
     ['Phone', lead.phone || '—'],
     ['Business', lead.businessName || '—'],
-    ['Type', lead.businessType],
+    ['Type', lead.businessType || '—'],
     ['Goals', goals.join(', ') || '—'],
     ['Features', parseKeys(lead.features).map(featureLabel).join(', ') || '—'],
     ['Message', lead.message || '—'],
-    ['Source', lead.source],
+    ['Came from', describeOrigin(lead)],
+    ...(lead.utmCampaign ? ([['Campaign', lead.utmCampaign]] as [string, string][]) : []),
+    ...(bookedByTeam(lead) ? [] : ([['Form opened from', lead.source]] as [string, string][])),
   ];
 };
 
-export function adminNewLeadMail(to: string[], lead: LeadForEmail, booking: BookingForEmail | null): Mail {
+/** The other admins' email when an admin books a call for someone from the Bookings page. */
+function adminBookedMail(to: string[], lead: LeadForEmail, booking: BookingForEmail, actor: string): Mail {
+  const name = `${lead.firstName} ${lead.lastName}`;
+  const ph = callTimeParts(booking.startsAt, PH);
+  const rendered = renderEmail({
+    preheader: `${actor} booked a call with ${name} for ${ph.long}.`,
+    label: 'Call booked by an admin',
+    tone: 'success',
+    title: `${actor} booked a call with ${name}`,
+    intro: [`The call was booked from the admin site. ${lead.firstName} has been emailed a confirmation with a calendar invite and their own reschedule/cancel link, and gets the usual reminder before the call.`],
+    details: [['Call', bothTimes(booking.startsAt, booking.timeZone)], ['Booked by', `${actor} (admin site)`], ...leadDetails(lead)],
+    footer: 'Sent to the other Byte Bun admins when an admin books a call.',
+  });
+  const from = lead.businessName ? ` (${lead.businessName})` : '';
+  return { to, subject: `${actor} booked a call with ${name}${from} for ${ph.shortDate} at ${ph.start} (PH time)`, ...rendered };
+}
+
+export function adminNewLeadMail(to: string[], lead: LeadForEmail, booking: BookingForEmail | null, src: ChangeSource = { by: 'lead' }): Mail {
+  if (booking && src.by === 'admin') return adminBookedMail(to, lead, booking, src.actor?.name ?? 'An admin');
   const name = `${lead.firstName} ${lead.lastName}`;
   const call = booking ? bothTimes(booking.startsAt, booking.timeZone) : 'No call booked';
   const rendered = renderEmail({
@@ -369,6 +402,10 @@ const leadSelect = {
   features: true,
   message: true,
   source: true,
+  channel: true,
+  origin: true,
+  originDetail: true,
+  utmCampaign: true,
   createdAt: true,
   manageNonce: true,
 } as const;
@@ -430,8 +467,11 @@ export class LeadEmailsService implements OnApplicationBootstrap, OnModuleDestro
     });
   }
 
-  /** A new lead: confirmation to them, notification to the admins. */
-  newLead(leadId: number): void {
+  /**
+   * A new lead: confirmation to them, notification to the admins. When an admin booked it (`src`),
+   * the admin who did is not emailed (they saw it on screen).
+   */
+  newLead(leadId: number, src: ChangeSource = { by: 'lead' }): void {
     this.background('new lead', async () => {
       const row = await this.load(leadId);
       if (!row) return;
@@ -445,7 +485,8 @@ export class LeadEmailsService implements OnApplicationBootstrap, OnModuleDestro
           })(),
         );
       }
-      if (this.cfg.auth.alertEmails.length) tasks.push(this.mailer.send(adminNewLeadMail(this.cfg.auth.alertEmails, lead, booking)));
+      const admins = adminRecipients(this.cfg.auth.alertEmails, src);
+      if (admins.length) tasks.push(this.mailer.send(adminNewLeadMail(admins, lead, booking, src)));
       const results = await Promise.allSettled(tasks);
       for (const r of results) if (r.status === 'rejected') logger.error({ leadId, reason: String(r.reason) }, 'New lead email failed');
     });

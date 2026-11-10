@@ -4,6 +4,7 @@ import { useBookings } from '../hooks/admin/useAdminPages.js';
 import { dayKey, shiftMonth, useCalendarMonth } from '../hooks/admin/useCalendarMonth.js';
 import { fetchLead, monthChanged, openLead, viewChanged } from '../store/adminDataSlices.js';
 import { PageTitle } from './AdminLayout.jsx';
+import { NewBookingDialog } from './NewBookingDialog.jsx';
 import { AdminButton, formatDateTime, Notice, Panel, Spinner } from './ui.jsx';
 
 const dayTitle = (iso) => new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(iso));
@@ -17,36 +18,47 @@ function useCancelBooking() {
 }
 
 // Booked calls: a month calendar, or a list. Times are in your browser's time zone.
-// Clicking a call opens the lead drawer (details, edit).
+// Clicking a call opens the lead drawer (details, edit). "New booking" books an open time for
+// someone who reached the team another way (NewBookingDialog.jsx).
 export function BookingsPage() {
   const dispatch = useDispatch();
   const view = useSelector((s) => s.adminBookings.view);
+  const [booking, setBooking] = useState(false);
   return (
     <>
       <PageTitle
         title="Bookings"
         actions={
-          <div className="flex rounded-btn border-2 border-line bg-cream-dough p-1" role="tablist" aria-label="View">
-            {[
-              ['calendar', 'Calendar'],
-              ['list', 'List'],
-            ].map(([v, label]) => (
-              <button
-                key={v}
-                role="tab"
-                aria-selected={view === v}
-                onClick={() => dispatch(viewChanged(v))}
-                className={`cursor-pointer rounded-md px-4 py-1.5 text-sm font-semibold ${view === v ? 'bg-byte-purple text-cream-dough' : 'text-muted hover:text-byte-purple'}`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex rounded-btn border-2 border-line bg-cream-dough p-1" role="tablist" aria-label="View">
+              {[
+                ['calendar', 'Calendar'],
+                ['list', 'List'],
+              ].map(([v, label]) => (
+                <button
+                  key={v}
+                  role="tab"
+                  aria-selected={view === v}
+                  onClick={() => dispatch(viewChanged(v))}
+                  className={`cursor-pointer rounded-md px-4 py-1.5 text-sm font-semibold ${view === v ? 'bg-byte-purple text-cream-dough' : 'text-muted hover:text-byte-purple'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <AdminButton onClick={() => setBooking(true)}>
+              <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New booking
+            </AdminButton>
           </div>
         }
       >
-        Free calls booked on the lead page. Times are shown in your time zone.
+        Free calls booked on the lead page, in the chat, or here by an admin. Times are shown in your time zone.
       </PageTitle>
       {view === 'calendar' ? <CalendarView /> : <ListView />}
+      {booking && <NewBookingDialog onClose={() => setBooking(false)} />}
     </>
   );
 }

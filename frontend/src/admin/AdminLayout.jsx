@@ -11,6 +11,7 @@ const NAV = [
   { href: '/admin/leads', label: 'Leads', hint: 'Everyone who filled in the form', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
   { href: '/admin/bookings', label: 'Bookings', hint: 'Calendar of booked calls', icon: 'M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z' },
   { href: '/admin/prospects', label: 'Prospecting', hint: 'Find businesses to pitch', icon: 'M12 21s-7-6.1-7-11.5A7 7 0 0119 9.5C19 14.9 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z' },
+  { href: '/admin/tasks', label: 'Tasks', hint: 'Team to-do board', icon: 'M9 11l3 3 8-8M20 12v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1h11' },
   { href: '/admin/security', label: 'Security', hint: 'Sessions and backup codes', icon: 'M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z' },
 ];
 
