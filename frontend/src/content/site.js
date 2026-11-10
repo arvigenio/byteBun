@@ -328,15 +328,22 @@ export const site = {
   // backend/src/chat/knowledge.ts: when prices, plans, or the FAQ above change, update that too.
   chat: {
     launcherLabel: 'Chat with us',
-    launcherHint: 'Questions? Ask Bun',
-    title: 'Bun from Byte Bun Tech',
-    status: 'Usually replies in seconds',
+    launcherHint: 'Questions? Ask Chatbunny',
+    title: 'Chatbunny',
+    subtitle: 'Byte Bun Tech assistant',
+    status: 'Online, replies in seconds',
     closeLabel: 'Close chat',
-    greeting: "Hi! I'm Bun, Byte Bun Tech's assistant. Ask me anything about websites, automations, or pricing, or tell me about your business and I'll show you how we can help.",
-    starters: ['What do you build?', 'How much does it cost?', 'Is the website really free?', 'Book a free consultation'],
+    greeting: "Hi! I'm Chatbunny, Byte Bun Tech's assistant. Ask me anything about websites, automations, or pricing, or tell me about your business and I'll show you how we can help.",
+    // `icon` is a name from components/ui/Icon.jsx.
+    starters: [
+      { text: 'What do you build?', icon: 'code' },
+      { text: 'How much does it cost?', icon: 'sparkle' },
+      { text: 'Is the website really free?', icon: 'gift' },
+      { text: 'Book a free consultation', icon: 'calendar' },
+    ],
     placeholder: 'Type your question…',
     sendLabel: 'Send',
-    typing: 'Bun is typing',
+    typing: 'Chatbunny is typing',
     error: 'Sorry, that did not go through. Please try again.',
     retry: 'Try again',
     offlineCta: 'Open the booking page',

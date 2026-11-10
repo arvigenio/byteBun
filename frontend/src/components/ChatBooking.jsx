@@ -68,7 +68,7 @@ export function ChatBooking({ prefill }) {
     return (
       <Card>
         <p className="flex items-start gap-2 text-sm font-semibold text-midnight-plum">
-          <span className="mt-0.5 inline-grid size-5 flex-none place-items-center rounded-full bg-circuit-teal">
+          <span className="mt-0.5 inline-grid size-5 flex-none place-items-center rounded-full bg-circuit-teal motion-safe:animate-pop">
             <Icon name="check" className="size-3" strokeWidth={3} />
           </span>
           {formatWhen(booked.meetingAt, booked.timeZone)}
@@ -86,8 +86,10 @@ export function ChatBooking({ prefill }) {
 
   return (
     <Card>
-      <p className="flex items-center gap-1.5 text-sm font-bold text-byte-purple">
-        <Icon name="calendar" className="size-4" strokeWidth={2} />
+      <p className="-mx-3 -mt-3 mb-1 flex items-center gap-2 rounded-t-card bg-linear-to-r from-bun-orange via-honey-gold to-bun-orange bg-size-[200%_100%] px-3 py-2.5 text-sm font-bold text-midnight-plum motion-safe:animate-gradient-pan">
+        <span className="grid size-7 place-items-center rounded-full bg-cream-dough/70 motion-safe:animate-float">
+          <Icon name="calendar" className="size-4" strokeWidth={2.2} />
+        </span>
         {b.title}
       </p>
 
@@ -125,8 +127,10 @@ export function ChatBooking({ prefill }) {
                 role="tab"
                 aria-selected={key === activeDay}
                 onClick={() => setPickedDay(key)}
-                className={`flex w-12 flex-none cursor-pointer flex-col items-center rounded-lg border py-1.5 text-xs transition-colors ${
-                  key === activeDay ? 'border-byte-purple bg-byte-purple text-cream-dough' : 'border-line bg-cream-dough text-midnight-plum hover:border-soft-violet'
+                className={`flex w-12 flex-none cursor-pointer flex-col items-center rounded-xl border-2 py-1.5 text-xs transition-all ${
+                  key === activeDay
+                    ? 'scale-105 border-transparent bg-linear-to-b from-byte-purple to-soft-violet text-cream-dough shadow-md'
+                    : 'border-line bg-lavender-mist/50 text-midnight-plum hover:border-soft-violet motion-safe:hover:-translate-y-0.5'
                 }`}
               >
                 <span>{dayFormat(key, { weekday: 'short' })}</span>
@@ -136,14 +140,15 @@ export function ChatBooking({ prefill }) {
             ))}
           </div>
           <div className="mt-1.5 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={`Times on ${dayFormat(activeDay, { weekday: 'long', month: 'long', day: 'numeric' })}`}>
-            {(groups.get(activeDay) ?? []).map((iso) => (
+            {(groups.get(activeDay) ?? []).map((iso, i) => (
               <button
-                key={iso}
+                key={`${activeDay}-${iso}`}
                 type="button"
                 role="radio"
                 aria-checked={false}
                 onClick={() => setValue('meetingAt', iso, { shouldValidate: true })}
-                className="cursor-pointer rounded-lg border border-line bg-cream-dough py-2 text-sm font-semibold text-byte-purple transition-colors hover:border-byte-purple hover:bg-lavender-mist"
+                style={{ animationDelay: `${i * 40}ms` }}
+                className="cursor-pointer rounded-xl border-2 border-circuit-teal/40 bg-circuit-teal/10 py-2 text-sm font-semibold text-midnight-plum transition-all hover:border-circuit-teal hover:bg-circuit-teal/25 motion-safe:animate-pop motion-safe:hover:scale-105"
               >
                 {formatTime(iso, timeZone)}
               </button>
@@ -153,7 +158,7 @@ export function ChatBooking({ prefill }) {
         </>
       ) : (
         <form onSubmit={onSubmit} noValidate className="mt-3 grid gap-2">
-          <div className="flex items-center justify-between gap-2 rounded-lg bg-gold-tint px-2.5 py-2 text-sm font-semibold text-midnight-plum">
+          <div className="flex items-center justify-between gap-2 rounded-xl border-2 border-honey-gold/60 bg-gold-tint px-2.5 py-2 text-sm font-semibold text-midnight-plum motion-safe:animate-pop">
             <span>{fill(b.pickedLabel, { when: formatWhen(meetingAt, timeZone) })}</span>
             <button type="button" className="flex-none cursor-pointer text-xs font-semibold text-byte-purple underline" onClick={() => setValue('meetingAt', '')}>
               {b.changeTime}
@@ -176,7 +181,7 @@ export function ChatBooking({ prefill }) {
           <button
             type="submit"
             disabled={sending}
-            className="min-h-11 cursor-pointer rounded-btn bg-bun-orange px-4 font-semibold text-midnight-plum transition-colors hover:bg-bun-orange-hover disabled:cursor-wait disabled:opacity-70"
+            className="min-h-11 cursor-pointer rounded-btn bg-linear-to-r from-bun-orange via-honey-gold to-bun-orange bg-size-[200%_100%] px-4 font-bold text-midnight-plum shadow-md transition-transform motion-safe:animate-gradient-pan motion-safe:hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"
           >
             {sending ? b.sending : b.submit}
           </button>
@@ -194,7 +199,7 @@ export function ChatBooking({ prefill }) {
 }
 
 function Card({ children }) {
-  return <div className="mt-2 w-full rounded-card border border-line bg-cream-dough p-3 shadow-sm">{children}</div>;
+  return <div className="mt-2 w-full overflow-hidden rounded-card border-2 border-honey-gold/50 bg-cream-dough p-3 shadow-lg motion-safe:animate-rise">{children}</div>;
 }
 
 function Field({ label, error, ref, ...input }) {
@@ -204,7 +209,7 @@ function Field({ label, error, ref, ...input }) {
       <input
         ref={ref}
         aria-invalid={!!error}
-        className={`min-h-10 rounded-lg border bg-cream-dough px-2.5 text-sm font-normal text-midnight-plum outline-none focus:border-byte-purple ${error ? 'border-danger' : 'border-line'}`}
+        className={`min-h-10 rounded-xl border-2 bg-lavender-mist/40 px-2.5 text-sm font-normal text-midnight-plum transition-colors outline-none focus:border-soft-violet focus:bg-cream-dough ${error ? 'border-danger' : 'border-line'}`}
         {...input}
       />
       {error && <span className="font-normal text-danger">{error}</span>}

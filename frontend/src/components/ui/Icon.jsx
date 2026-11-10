@@ -85,6 +85,13 @@ const PATHS = {
   arrowLeft: <path d="M19 12H5M11 6l-6 6 6 6" />,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
+  bunny: (
+    <>
+      <path d="M9.2 9.6C8 6.6 7.6 2.8 9 2.5s2.6 3.3 2.6 6.6M14.8 9.6c1.2-3 1.6-6.8.2-7.1s-2.6 3.3-2.6 6.6" />
+      <circle cx="12" cy="15" r="6.3" />
+      <path d="M9.8 14.2h.01M14.2 14.2h.01M11 16.8c.6.5 1.4.5 2 0" />
+    </>
+  ),
 };
 
 export function Icon({ name, className = 'size-6', strokeWidth = 1.8 }) {
