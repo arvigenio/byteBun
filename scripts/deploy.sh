@@ -131,7 +131,11 @@ main() {
 #  - the db service as Compose resolves it (image, volumes and their real names, environment)
 #    differs: e.g. another database engine/version or a renamed volume = an empty database
 #  - an existing migration was deleted, renamed or edited, or migration_lock.toml changed
-#  - a new migration drops a table/column, truncates, deletes rows, or changes a column's type
+#  - a new migration drops a table/column, truncates, deletes rows, or changes a column's type,
+#    unless its folder has a `deploy-guard-reviewed` file (someone checked that the data is
+#    carried over first, e.g. backfill then drop; the file says why). A separate file, not a
+#    comment, so migration.sql's Prisma checksum never changes. Those deploy automatically;
+#    the pre-deploy backup still runs.
 # If a commit's db service can't be resolved, that counts as a change (fail safe).
 check_database_changes() {
   local from=$1 to=$2 old new tmp f
@@ -157,7 +161,9 @@ check_database_changes() {
   git diff --name-only --diff-filter=A "$from" "$to" -- 'backend/prisma/migrations/*.sql' |
     while read -r f; do
       # Process substitution, not a pipe: with pipefail, grep -q stopping early could fail the pipe.
-      if grep -qiE 'drop[[:space:]]+(table|column|schema|database)|truncate|delete[[:space:]]+from|alter[[:space:]]+column[^;]*[[:space:]]type[[:space:]]' <(git show "$to:$f"); then
+      if git cat-file -e "$to:$(dirname "$f")/deploy-guard-reviewed" 2>/dev/null; then
+        echo "  (reviewed, deploying automatically: $f)" >&2
+      elif grep -qiE 'drop[[:space:]]+(table|column|schema|database)|truncate|delete[[:space:]]+from|alter[[:space:]]+column[^;]*[[:space:]]type[[:space:]]' <(git show "$to:$f"); then
         echo "- new migration drops, deletes or retypes data: $f"
       fi
     done

@@ -1,0 +1,1 @@
+The UPDATE copies "done" into "status" before the "done" column is dropped, so no data is lost.

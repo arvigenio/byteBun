@@ -103,7 +103,7 @@ From now on, `git push` to `main` is a deploy.
 | Re-deploy the same commit | Actions → Deploy → Run workflow |
 | Watch a deploy | Actions tab, or on the VPS `docker compose -f docker-compose.prod.yml logs -f app` |
 | Deploy by hand (e.g. GitHub down) | on the VPS: `/opt/bytebun-web/scripts/deploy.sh` |
-| Deploy failed with "STOPPED: this update changes the database" | On purpose: the push changes the db service (image, volume, settings) or adds a risky migration, which can empty or delete data. The server still runs the previous version. Plan the data move, then on the VPS: `cd /opt/bytebun-web && ALLOW_DB_CHANGE=1 scripts/deploy.sh` |
+| Deploy failed with "STOPPED: this update changes the database" | On purpose: the push changes the db service (image, volume, settings) or adds a risky migration, which can empty or delete data. The server still runs the previous version. If it's a migration that carries the data over before dropping (e.g. backfill a new column, then drop the old one), add a `deploy-guard-reviewed` file to its folder saying why it's safe, and push: it then deploys automatically (the backup still runs). Otherwise plan the data move, then on the VPS: `cd /opt/bytebun-web && ALLOW_DB_CHANGE=1 scripts/deploy.sh` |
 | Find or restore a pre-deploy backup | Every deploy saves `backups/pre-deploy-<date>-<commit>.dump` on the VPS first (newest 14 kept). Restore: [DEPLOY-VPS.md](DEPLOY-VPS.md#restore) |
 | Undo a bad release | `git revert <commit>` and push (the rollback only covers releases that fail the health check) |
 | Pause automatic deploys | Actions → Deploy → ⋯ → Disable workflow |
