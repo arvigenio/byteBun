@@ -27,7 +27,7 @@ export const site = {
   },
 
   topStrip: {
-    text: 'Free website, free domain, and free hosting included with every plan.',
+    text: 'Website, domain, and hosting included with Premium and Growth.',
     linkLabel: 'Claim yours',
     href: '#contact',
   },
@@ -46,10 +46,10 @@ export const site = {
     // Shown as pills above the headline: the two things we want every visitor to remember.
     pillars: ['Custom websites', 'Web applications', 'Custom automations'],
     title: 'Custom websites and automations that fill your appointment book.',
-    lead: 'We design and build custom websites, web applications, and automations around how your business actually runs, so every lead is answered and missed calls become booked visits. Your website, domain, and hosting are free and included.',
+    lead: 'We design and build custom websites, web applications, and automations around how your business actually runs, so every lead is answered and missed calls become booked visits. Premium and Growth include your website, domain, and hosting.',
     primaryCta: { label: 'Get my free consultation', lead: 'hero' },
     secondaryCta: { label: 'See what we build', href: '#build' },
-    trust: ['Built for you, not a template', 'Free domain and hosting', 'Typically live in 2 to 4 weeks'],
+    trust: ['Built for you, not a template', 'Domain and hosting included', 'Typically live in 2 to 4 weeks'],
     chat: {
       ariaLabel: 'Sample chat: a patient books a dental cleaning',
       header: 'BrightSmile Dental assistant',
@@ -100,8 +100,8 @@ export const site = {
   },
 
   freeBand: {
-    title: 'Your website, domain, and hosting are free. Always included.',
-    text: 'No separate bills for a web designer, a domain registrar, or a hosting company. Pick a plan and we cover the website, the domain name, secure hosting, and SSL while your plan is active.',
+    title: 'Your website, domain, and hosting, included with Premium and Growth.',
+    text: 'No separate bills for a web designer, a domain registrar, or a hosting company. On Premium and Growth we cover the website, the domain name, secure hosting, and SSL while your plan is active.',
     cta: { label: 'Get my free website', lead: 'free-band' },
     badges: [
       { title: 'Free website', caption: 'Designed and built for you' },
@@ -147,7 +147,7 @@ export const site = {
       { figure: '< 60 sec', text: 'Target reply time to a new lead or missed call, day or night.' },
       { figure: '24/7', text: 'Chatbot coverage for questions and booking requests, including after hours.' },
       { figure: '2 to 4 weeks', text: 'Typical time from signed proposal to a live system.' },
-      { figure: '$0', text: 'For your website, domain, and hosting while your plan is active.' },
+      { figure: '$0', text: 'Extra for your website, domain, and hosting on Premium and Growth.' },
     ],
     ctas: [
       { label: 'Start with a free consultation', lead: 'metrics' },
@@ -155,40 +155,91 @@ export const site = {
     ],
   },
 
+  // Prices in USD only. Keep them identical in the FAQ below, the meta tags, and the chatbot
+  // (backend/src/chat/knowledge.ts). Never mention a setup fee amount anywhere on the page, and
+  // never say "no setup fee", "no hidden fees" or "nothing else to pay".
   packages: {
     eyebrow: 'Pricing',
-    title: 'Simple monthly plans. Free website, domain, and hosting.',
-    subtitle: 'Start small and add features as you grow. Every plan includes your website, domain, and hosting at no extra cost.',
-    // PLACEHOLDER: all prices are sample pricing.
+    title: 'Simple plans for every clinic',
+    subtitle: 'We build and run your website and patient system for you. Prices in USD.',
+    // Plans with `onSite: false` are not shown on bytebuntech.com (only in the Bookings app's
+    // Plan page, for clients already on them).
+    billing: { monthly: 'Monthly', yearly: 'Pay yearly', yearlyNote: '2 months free' },
     plans: [
       {
-        name: 'Starter',
-        price: '$99', // PLACEHOLDER
-        period: '/month',
-        blurb: 'For new businesses that need to capture leads.',
-        features: ['Free website, domain, and hosting', 'Booking calendar and forms', 'Instant email and SMS reply', 'Basic follow-up sequence'],
-        cta: { label: 'Choose Starter', lead: 'plan-starter' },
+        name: 'Free',
+        onSite: false,
+        price: { monthly: '$0', yearly: '$0' },
+        blurb: 'Online booking for new and small businesses.',
+        features: ['Calendar Booking (up to 60 bookings/month)', 'Email confirmations + reminders (2 days / 1 day before)', 'Survey (basic)'],
+        cta: { label: 'Start Free', href: 'https://bookings.bytebuntech.com/', newTab: false },
+      },
+      {
+        name: 'Bookings Pro',
+        onSite: false,
+        price: { monthly: '$10', yearly: '$100' },
+        blurb: 'Unlimited booking with your own branding.',
+        features: ['Unlimited bookings', 'Booking history kept', 'Email reminders + WhatsApp alerts to owner', 'Custom branding (logo, colors, instructions)', 'Smart Waitlist & Auto-Fill'],
+        cta: { label: 'Upgrade to Pro', href: 'https://bookings.bytebuntech.com/app/plan', newTab: false },
+      },
+      {
+        name: 'Premium',
+        price: { monthly: '$79', yearly: '$790' },
+        blurb: 'Your website and patient system, built and run for you.',
+        features: [
+          'Dental or Vet Clinic Management System access',
+          'Professional website, domain, hosting & SSL',
+          'Lead capture',
+          'Calendar Booking with unlimited WhatsApp + email reminders (customizable down to 1 hour before)',
+          'Survey + Google Reviews',
+          'AI Prospecting & Ranking',
+          'Custom Dashboard',
+          'Tasks Manager, Team Calendars, Team Chats & Messaging',
+          'Unified Inbox',
+          'Smart Waitlist & Auto-Fill',
+        ],
+        included: ['3 website updates', '2 SEO blog posts', '2 AI marketing videos'],
+        cta: { label: 'Book a Free Consultation', lead: 'plan-premium' },
       },
       {
         name: 'Growth',
-        price: '$297', // PLACEHOLDER
-        period: '/month',
-        blurb: 'For clinics with traffic but weak follow-up.',
-        features: ['Free website, domain, and hosting', 'Missed-call text-back', 'AI website chatbot', 'Reminders and review requests', 'Monthly report'],
+        // PENDING: confirm $89 vs $99 (and $890 yearly) before publishing.
+        price: { monthly: '$89', yearly: '$890' },
+        blurb: 'Everything in Premium, with AI chat and more content every week.',
+        features: ['Everything in Premium, plus:', 'Website AI Chatbot', 'Social Media AI Chatbot (Facebook + Instagram)', 'Email Marketing'],
+        included: ['6 website updates + 1 larger update', '4 SEO blog posts (weekly)', '4 AI marketing videos (weekly)', 'Priority turnaround (2 business days)'],
         featured: true,
-        featuredLabel: 'Most popular',
-        cta: { label: 'Choose Growth', lead: 'plan-growth' },
-      },
-      {
-        name: 'Pro',
-        price: '$697', // PLACEHOLDER
-        period: '/month',
-        blurb: 'For teams that want the full system.',
-        features: ['Free website, domain, and hosting', 'Facebook and Instagram chatbot', 'Custom automations', 'Email campaigns and recalls', 'Client dashboard'],
-        cta: { label: 'Choose Pro', lead: 'plan-pro' },
+        featuredLabel: 'Most Popular',
+        cta: { label: 'Book a Free Consultation', lead: 'plan-growth' },
       },
     ],
-    note: 'Sample pricing. Plans have a minimum term. One-time setup fees and add-ons apply and are confirmed in your written proposal before you pay anything.',
+    includedTitle: 'Included every month',
+    comparison: "Everything your clinic needs, for less than GoHighLevel's software-only price – and we do the work for you.",
+    // PENDING: confirm the monthly chatbot add-on fees for Growth clients (included in their plan).
+    addOns: {
+      title: 'Add-ons',
+      subtitle: 'Add what your clinic needs to any plan.',
+      items: [
+        { name: 'Website AI Chatbot', price: '$19/month' },
+        { name: 'Social Media AI Chatbot', price: '$19/month' },
+        { name: 'Email Marketing', price: '$15/month' },
+        { name: 'Missed Call Text Back', price: '$15/month' },
+        { name: 'Recall & Reactivation Campaigns', price: '$15/month' },
+        { name: 'Digital Intake Forms + E-Signature', price: '$9/month' },
+        { name: 'Booking Deposits & No-Show Protection', price: '$9/month' },
+      ],
+      custom: { name: 'Custom Automated Process', price: "Let's talk", cta: { label: 'Book a Free Consultation', lead: 'addon-custom-automation' } },
+      extras: {
+        title: 'Extra content',
+        items: [
+          { name: 'Website update', price: '$15' },
+          { name: 'Blog post', price: '$25' },
+          { name: 'AI video', price: '$15' },
+          { name: 'Content pack (4 blogs + 4 videos)', price: '$99' },
+        ],
+      },
+    },
+    footnotes: ['Prices in USD. Fair-use limits apply to unlimited features.', 'Premium and Growth include a one-time onboarding, provided in your proposal.'],
     // A second path for visitors whose project doesn't fit a monthly plan.
     custom: {
       title: "Need something a plan doesn't cover?",
@@ -251,9 +302,18 @@ export const site = {
     title: 'Frequently asked questions',
     subtitle: 'Straight answers before you book.',
     items: [
-      { q: 'Are the website, domain, and hosting really free?', a: 'Yes. The website, domain registration, hosting, and SSL certificate are included at no extra charge while you have an active plan. Plans have a minimum term, which we explain in your proposal before you sign.' },
+      {
+        q: "What's included each month?",
+        a: 'Premium includes 3 website updates, 2 SEO blog posts, and 2 AI marketing videos every month. Growth includes 6 website updates plus 1 larger update, 4 SEO blog posts (weekly), 4 AI marketing videos (weekly), and priority turnaround in 2 business days.',
+      },
+      { q: 'Do unused updates roll over?', a: 'No, allowances reset monthly.' },
+      { q: 'Can I upgrade or downgrade?', a: 'Yes, anytime. Changes apply from your next billing cycle.' },
+      { q: 'Is the clinic management system included?', a: 'Yes. Premium and Growth include access to our Dental or Vet Clinic Management System.' },
+      { q: 'Is WhatsApp unlimited?', a: 'Yes on Premium and Growth, subject to fair use.' },
+      { q: 'How do I get started with Premium or Growth?', a: "Book a free consultation. We'll review your clinic's needs and send a proposal with everything included." },
+      { q: 'Are the website, domain, and hosting included?', a: 'Yes, on Premium and Growth. The website, domain registration, hosting, and SSL certificate are included while your plan is active. Plans have a minimum term, which we explain in your proposal before you sign.' },
       { q: 'What happens to my domain if I cancel?', a: 'After the minimum term is complete and your account is settled, we transfer the domain to you. The details are written into your agreement.' },
-      { q: 'How fast can we go live?', a: 'Most Starter and Growth setups go live in two to four weeks, depending on how quickly you send your logo, services, and FAQs.' },
+      { q: 'How fast can we go live?', a: 'Most Premium and Growth setups go live in two to four weeks, depending on how quickly you send your logo, services, and FAQs.' },
       { q: 'Will the AI chatbot say something wrong?', a: 'It only answers from information you approve. When it is unsure, it hands the conversation to your team instead of guessing, and it never gives medical advice.' },
       { q: 'Do I need to change my booking software?', a: 'Usually not. We can connect to common calendars and tools, or provide a booking calendar as part of your plan.' },
       { q: 'Can I cancel?', a: 'After the minimum term, yes, with 30 days notice. Your data stays yours.' },
@@ -273,22 +333,22 @@ export const site = {
 
   seo: {
     title: 'Custom websites, web applications, and automation, with free domain and hosting',
-    text: 'Byte Bun Tech is a small web and automation studio. We design and build custom websites, web applications, and custom automations, including free clinic websites with domain and hosting included, AI chatbots for websites, Facebook, and Instagram, missed-call text-back, appointment reminders, patient recall campaigns, and email marketing for dental clinics, veterinary clinics, and other local service businesses. Our systems are built with GoHighLevel CRM, n8n workflow automation, Claude AI, and custom Node.js software, and designed to help you respond faster, reduce no-shows, and bring existing customers back.',
+    text: 'Byte Bun Tech is a small web and automation studio. We design and build custom websites, web applications, and custom automations, including clinic websites with domain and hosting included on Premium and Growth, AI chatbots for websites, Facebook, and Instagram, missed-call text-back, appointment reminders, patient recall campaigns, and email marketing for dental clinics, veterinary clinics, and other local service businesses. Our systems are built with GoHighLevel CRM, n8n workflow automation, Claude AI, and custom Node.js software, and designed to help you respond faster, reduce no-shows, and bring existing customers back.',
   },
 
   // <head> tags, injected into index.html at build time by seo-plugin.js.
   meta: {
     title: 'Custom Websites, Web Apps and Automation for Clinics | Byte Bun Tech',
-    description: 'Byte Bun Tech builds custom websites, web apps, and automations for dental clinics, vet clinics, and local businesses, with free domain and hosting. Book a free consultation.',
+    description: 'Byte Bun Tech builds custom websites, web apps, and automations for dental clinics, vet clinics, and local businesses, with website, domain, and hosting included on Premium and Growth. Book a free consultation.',
     keywords: 'custom website development, custom web application, custom automation, business process automation, free website for clinics, free domain and hosting, AI chatbot for clinics, dental clinic website, vet clinic website, missed call text back, appointment reminders, GoHighLevel agency, n8n automation',
     // SITE_URL (env) overrides this at build time.
     canonical: 'https://bytebuntech.com/',
     ogTitle: 'Byte Bun Tech: custom websites, web apps, and automations',
-    ogDescription: 'Custom websites, web applications, and automations that answer every lead and fill your calendar. Domain and hosting are free with every plan.',
+    ogDescription: 'Custom websites, web applications, and automations that answer every lead and fill your calendar. Website, domain, and hosting included on Premium and Growth.',
     ogImage: '/og-image.png', // PLACEHOLDER image, 1200x630: replace public/og-image.png
     locale: 'en_US',
     // ProfessionalService JSON-LD
-    schemaDescription: 'Custom websites, web applications, and automations, with free domain and hosting, for dental clinics, veterinary clinics, and local service businesses.',
+    schemaDescription: 'Custom websites, web applications, and automations, with domain and hosting included on Premium and Growth, for dental clinics, veterinary clinics, and local service businesses.',
     serviceType: ['Custom website development', 'Web application development', 'Workflow automation', 'Website design', 'Web hosting', 'AI chatbot', 'CRM automation', 'Email marketing', 'Custom software'],
   },
 
@@ -347,7 +407,7 @@ export const site = {
     error: 'Sorry, that did not go through. Please try again.',
     retry: 'Try again',
     offlineCta: 'Open the booking page',
-    disclaimer: 'Answers come from an AI assistant and can be wrong. Prices are sample pricing.',
+    disclaimer: 'Answers come from an AI assistant and can be wrong. Prices are in USD.',
     booking: {
       title: 'Free 30-minute consultation',
       timeZoneLabel: 'Times shown in',
@@ -399,7 +459,7 @@ export const site = {
     // The promo step. Keep the fine print: it matches the FAQ and the plans' minimum term.
     bonus: {
       eyebrow: 'Bonus unlocked',
-      text: 'Every plan includes them at no extra cost. No separate bills for a web designer, a domain registrar, or a hosting company.',
+      text: 'Premium and Growth include all three. One plan instead of separate bills for a web designer, a domain registrar, and a hosting company.',
       previewLabel: 'Your new website could live at',
       previewNote: 'Example address. We help you pick and register the real one.',
       // Used when no business name was given, by business type.

@@ -63,6 +63,20 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-5-5}
       CHAT_RATE_LIMIT_MAX: ${CHAT_RATE_LIMIT_MAX:-40}
       CHAT_RATE_LIMIT_WINDOW_MINUTES: ${CHAT_RATE_LIMIT_WINDOW_MINUTES:-15}
+      # Client apps (accounts / Bookings / client portal). The reverse proxy must send these three
+      # hosts to this container too (docs/DEPLOY-VPS.md). The session cookie is shared across
+      # them through CLIENT_COOKIE_DOMAIN. The clients database is created on first start.
+      CLIENTS_DB_NAME: ${CLIENTS_DB_NAME:-clients_db}
+      ACCOUNTS_URL: ${ACCOUNTS_URL:-https://accounts.bytebuntech.com}
+      BOOKINGS_URL: ${BOOKINGS_URL:-https://bookings.bytebuntech.com}
+      PORTAL_URL: ${PORTAL_URL:-https://clientportal.bytebuntech.com}
+      CLIENT_COOKIE_DOMAIN: ${CLIENT_COOKIE_DOMAIN:-.bytebuntech.com}
+      CLIENTS_MAIL_FROM: ${CLIENTS_MAIL_FROM:-Byte Bun Bookings <bookings@bytebuntech.com>}
+      WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
+      OWNER_ADMIN_EMAILS: ${OWNER_ADMIN_EMAILS:-}
+      CLIENTS_ADMIN_DB_USER: ${CLIENTS_ADMIN_DB_USER:-}
+      CLIENTS_ADMIN_DB_PASSWORD: ${CLIENTS_ADMIN_DB_PASSWORD:-}
       # TESTING_EMAIL_ADDRESS is deliberately not passed: production always emails real recipients.
     ports:
       - "127.0.0.1:${APP_PORT:-4000}:4000"

@@ -74,8 +74,10 @@ const sitemap = () =>
 export function seoPlugin() {
   return {
     name: 'bytebun-seo',
-    // Public pages only: the admin page (admin.html) gets no SEO tags, canonical or JSON-LD.
-    transformIndexHtml: (html, ctx) => (ctx?.filename?.endsWith('admin.html') || html.includes('/src/admin/main.jsx') ? html : headTags()),
+    // Public pages only: the admin page (admin.html) and the client app (client.html, its own
+    // product on its own hosts) get no Byte Bun SEO tags, canonical or JSON-LD.
+    transformIndexHtml: (html, ctx) =>
+      /(admin|client)\.html$/.test(ctx?.filename ?? '') || html.includes('/src/admin/main.jsx') || html.includes('/src/client/main.jsx') ? html : headTags(),
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (req.url === '/robots.txt') return res.setHeader('content-type', 'text/plain').end(robots());

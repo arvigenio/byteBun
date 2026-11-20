@@ -55,10 +55,41 @@ function adminPagesPlugin() {
   };
 }
 
+// Development only: the client hosts (accounts.localhost, bookings.localhost,
+// clientportal.localhost; *.localhost resolves to this machine in Chrome, Edge and Firefox) get the
+// client app (client.html) for every page, like production (backend/src/web/static-site.ts).
+// Must run before the admin plugin, so /sign-in etc. work there.
+const CLIENT_HOST_LABELS = new Set(['accounts', 'bookings', 'clientportal']);
+function clientHostsPlugin() {
+  return {
+    name: 'bytebun-client-hosts',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
+        if (!CLIENT_HOST_LABELS.has(host.split('.')[0]) || host.split('.').length < 2) return next();
+        const p = new URL(req.url, 'http://dev').pathname;
+        // API, Vite internals, source files and real files in public/ pass through.
+        if (/^\/(api|@|src|node_modules|assets|client)(\/|$)/.test(p) || p.startsWith('/@') || /\.[a-z0-9]+$/i.test(p) && !p.endsWith('.html')) return next();
+        try {
+          const html = await server.transformIndexHtml(req.url, fs.readFileSync(path.resolve(server.config.root, 'client.html'), 'utf8'));
+          res.setHeader('Content-Type', 'text/html');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(html);
+        } catch (err) {
+          next(err);
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), seoPlugin(), adminPagesPlugin()],
+  plugins: [react(), tailwindcss(), seoPlugin(), clientHostsPlugin(), adminPagesPlugin()],
   server: {
     host: '0.0.0.0',
+    // The client hosts in development (see clientHostsPlugin).
+    allowedHosts: ['.localhost'],
     port: 5173,
     strictPort: true,
     // Windows bind mounts don't forward file-change events into containers, so poll instead.
@@ -71,12 +102,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    // Two separate apps: the public site, and the admin app (its own bundle, so none of the
+    // Three separate apps: the public site, the admin app, and the client app. The first two: (its own bundle, so none of the
     // admin code is downloaded by visitors).
     rollupOptions: {
       input: {
         main: path.resolve(import.meta.dirname, 'index.html'),
         admin: path.resolve(import.meta.dirname, 'admin.html'),
+        // Client apps (accounts / bookings / client portal), served on their own hosts.
+        client: path.resolve(import.meta.dirname, 'client.html'),
       },
     },
   },

@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/* The client apps' own look (not the Byte Bun marketing site's). Neutral surfaces with ONE brand
+   color, --color-brand, that changes with where the app runs:
+     bookings / accounts host   Byte Bun Bookings teal
+     clientportal host          Byte Bun purple
+     a public booking page      the business's own color (set inline by the page)
+   Never hard-code hex in components; use these tokens. */
+@custom-variant mobile (@media (max-width: 720px));
+@custom-variant desktop (@media (min-width: 721px));
+
+@theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  --color-*: initial;
+  --color-white: #FFFFFF;
+  --color-black: #000000;
+  --color-transparent: transparent;
+  --color-canvas: #F6F7F9;
+  --color-surface: #FFFFFF;
+  --color-sunken: #F1F3F5;
+  --color-line: #E3E6EA;
+  --color-line-strong: #CBD1D8;
+  --color-ink: #111827;
+  --color-muted: #4B5563;
+  --color-faint: #6B7280;
+  --color-brand: #0F766E;
+  --color-brand-ink: #FFFFFF;
+  --color-brand-soft: #E6F4F2;
+  --color-accent: #F59E0B;
+  --color-danger: #B42318;
+  --color-danger-soft: #FDECEA;
+  --color-warn: #8A5A00;
+  --color-warn-soft: #FFF4D6;
+  --color-ok: #067647;
+  --color-ok-soft: #E7F6EC;
+
+  --radius-btn: 10px;
+  --radius-card: 14px;
+}
+
+:root[data-surface="portal"] {
+  --color-brand: #331165;
+  --color-brand-soft: #EDE7F8;
+  --color-accent: #FFA612;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Rich text written by businesses (instructions). */
+.rich p { margin: 0 0 0.5rem; }
+.rich ul { list-style: disc; padding-left: 1.25rem; margin: 0 0 0.5rem; }
+.rich ol { list-style: decimal; padding-left: 1.25rem; margin: 0 0 0.5rem; }
+.rich a { color: var(--color-brand); text-decoration: underline; }
+.rich h3, .rich h4 { font-weight: 600; margin: 0.5rem 0 0.25rem; }
+.rich blockquote { border-left: 3px solid var(--color-line-strong); padding-left: 0.75rem; color: var(--color-muted); }
+.tiptap:focus { outline: none; }
+.tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--color-faint); float: left; height: 0; pointer-events: none; }
+
+/* ---- Bookings landing page (pages/BookingsLanding.jsx) ----
+   Scroll reveal: elements with data-reveal="up|left|right|zoom" (or "stagger" for a group) start
+   hidden only once the hook has run (.reveal-ready on <html>) and only when motion is welcome, so
+   nothing stays invisible without JavaScript or for people who prefer reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-ready [data-reveal]:not([data-reveal="stagger"]),
+  .reveal-ready [data-reveal="stagger"] > * {
+    opacity: 0;
+    transition: opacity 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-delay: var(--d, 0ms);
+  }
+  .reveal-ready [data-reveal="up"], .reveal-ready [data-reveal="stagger"] > * { transform: translateY(28px); }
+  .reveal-ready [data-reveal="left"] { transform: translateX(-40px); }
+  .reveal-ready [data-reveal="right"] { transform: translateX(40px); }
+  .reveal-ready [data-reveal="zoom"] { transform: scale(0.94); }
+  .reveal-ready [data-reveal].is-in:not([data-reveal="stagger"]),
+  .reveal-ready [data-reveal="stagger"].is-in > * { opacity: 1; transform: none; }
+  .reveal-ready [data-reveal="stagger"] > :nth-child(2) { --d: 80ms; }
+  .reveal-ready [data-reveal="stagger"] > :nth-child(3) { --d: 160ms; }
+  .reveal-ready [data-reveal="stagger"] > :nth-child(4) { --d: 240ms; }
+  .reveal-ready [data-reveal="stagger"] > :nth-child(5) { --d: 320ms; }
+  .reveal-ready [data-reveal="stagger"] > :nth-child(6) { --d: 400ms; }
+  .reveal-ready [data-reveal="stagger"] > :nth-child(n + 7) { --d: 480ms; }
+
+  .float-slow { animation: float-slow 7s ease-in-out infinite; }
+  .pop-in { animation: pop-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+  .fade-swap { animation: fade-swap 0.4s ease both; }
+  .blob { animation: blob 14s ease-in-out infinite alternate; }
+}
+@keyframes float-slow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes pop-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes fade-swap { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes blob { from { transform: translate(0, 0) scale(1); } to { transform: translate(30px, -20px) scale(1.12); } }

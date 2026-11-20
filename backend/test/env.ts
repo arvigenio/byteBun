@@ -5,6 +5,17 @@ import path from 'node:path';
 
 process.env.NODE_ENV = 'test';
 process.env.DB_NAME = process.env.TEST_DB_NAME || 'bytebun_test';
+process.env.CLIENTS_DB_NAME = process.env.TEST_CLIENTS_DB_NAME || 'clients_db_test';
+process.env.CLIENTS_DATABASE_URL = '';
+// Client hosts (clients/hosts.ts); tests send these as the Host header. Host-only cookies.
+process.env.ACCOUNTS_URL = 'http://accounts.localhost:5173';
+process.env.BOOKINGS_URL = 'http://bookings.localhost:5173';
+process.env.PORTAL_URL = 'http://clientportal.localhost:5173';
+process.env.CLIENT_COOKIE_DOMAIN = '';
+// WhatsApp: in tests messages land in whatsappOutbox (notifications.ts), never on the network.
+process.env.WHATSAPP_WEBHOOK_URL = 'http://n8n.test/whatsapp';
+process.env.OWNER_ADMIN_EMAILS = '';
+process.env.CLIENTS_ADMIN_DB_USER = '';
 process.env.LOG_LEVEL = process.env.TEST_LOG_LEVEL || 'fatal';
 process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
 process.env.BETTER_AUTH_URL = 'http://localhost:5173';

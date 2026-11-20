@@ -60,6 +60,14 @@ export async function startApp(): Promise<TestApp> {
   };
 }
 
+/** Clients database: no users, businesses or bookings (plans stay). */
+export async function resetClients(db: { $executeRawUnsafe: (sql: string) => Promise<unknown> }) {
+  await settle(100);
+  await db.$executeRawUnsafe(
+    'TRUNCATE auth.users, auth.sessions, auth.accounts, auth.verifications, auth.rate_limits, auth.organizations, auth.members, auth.invitations, billing.subscriptions, billing.subscription_addons, billing.entitlements, billing.account_status, billing.events, booking.settings, booking.weekly_hours, booking.breaks, booking.blocked_dates, booking.services, booking.customers, booking.bookings, booking.notifications RESTART IDENTITY CASCADE',
+  );
+}
+
 /** Back to a clean slate: admins exist, nobody enrolled or signed in, no limits used, no mail. */
 export async function resetState(prisma: PrismaClient) {
   await settle();

@@ -35,6 +35,41 @@ export interface AppConfig {
   booking: BookingConfig;
   prospects: ProspectsConfig;
   chat: ChatConfig;
+  clients: ClientsConfig;
+}
+
+/** Client apps (accounts / bookings / client portal), served by this same app on their own hosts. */
+export interface ClientsConfig {
+  /** The clients database on the same PostgreSQL server (DB_HOST, DB_USER, ...), e.g. clients_db. */
+  dbName: string;
+  /** Central sign-in, e.g. https://accounts.bytebuntech.com */
+  accountsUrl: string;
+  /** Standalone Bookings app + public booking pages, e.g. https://bookings.bytebuntech.com */
+  bookingsUrl: string;
+  /** Client portal (packaged clients), e.g. https://clientportal.bytebuntech.com */
+  portalUrl: string;
+  /**
+   * Cookie domain shared by the three hosts, e.g. .bytebuntech.com (one sign-in for all).
+   * Empty = host-only cookies (local development on *.localhost): each host signs in on its own.
+   */
+  cookieDomain: string;
+  /** Sender of client emails (sign-in codes, booking confirmations). The business name is put in front. */
+  mailFrom: string;
+  /**
+   * WhatsApp messages (paid plans) are POSTed here as JSON for n8n to send through the WhatsApp
+   * Business API. Empty = WhatsApp messages go out as email instead.
+   */
+  whatsappWebhookUrl: string;
+  /** Sent as the X-Bytebun-Secret header so n8n can reject anyone else. */
+  whatsappWebhookSecret: string;
+  /**
+   * The admin site's own, limited login for the clients database (CLIENTS_ADMIN_DB_USER /
+   * _PASSWORD; docs/CLIENTS-DB-ADMIN-USER.sql). Empty = the app's DB_USER.
+   */
+  adminDbUser: string;
+  adminDbPassword: string;
+  /** Admins who may permanently delete clients (owner-level). Default: every admin. */
+  ownerAdminEmails: string[];
 }
 
 export interface ChatConfig {
@@ -222,6 +257,32 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const chatModel = env.ANTHROPIC_MODEL?.trim() || 'claude-haiku-5-5';
   if (!/^[a-z0-9][a-z0-9.\-]{1,80}$/i.test(chatModel)) problems.push('ANTHROPIC_MODEL must be a model name like claude-haiku-5-5.');
 
+  // ---- Client apps ----
+  const clientsDbName = env.CLIENTS_DB_NAME?.trim() || 'clients_db';
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(clientsDbName)) problems.push('CLIENTS_DB_NAME may only contain letters, numbers, and underscores.');
+  if (clientsDbName === dbName) problems.push('CLIENTS_DB_NAME must be a different database from DB_NAME.');
+  const origin = (name: string, prodDefault: string, devDefault: string) => {
+    const v = (env[name]?.trim() || (isProd ? prodDefault : devDefault)).replace(/\/+$/, '');
+    if (!/^https?:\/\/[^/]+$/i.test(v)) problems.push(`${name} must be an origin like ${prodDefault} (no path).`);
+    else if (isProd && !v.startsWith('https://')) problems.push(`${name} must use https:// in production.`);
+    return v;
+  };
+  const accountsUrl = origin('ACCOUNTS_URL', 'https://accounts.bytebuntech.com', 'http://accounts.localhost:5173');
+  const bookingsUrl = origin('BOOKINGS_URL', 'https://bookings.bytebuntech.com', 'http://bookings.localhost:5173');
+  const portalUrl = origin('PORTAL_URL', 'https://clientportal.bytebuntech.com', 'http://clientportal.localhost:5173');
+  const cookieDomain = (env.CLIENT_COOKIE_DOMAIN ?? (isProd ? '.bytebuntech.com' : '')).trim();
+  if (cookieDomain && !/^\.?[a-z0-9.-]+\.[a-z]{2,}$/i.test(cookieDomain)) problems.push('CLIENT_COOKIE_DOMAIN must look like .bytebuntech.com (or be empty).');
+
+  const whatsappWebhookUrl = env.WHATSAPP_WEBHOOK_URL?.trim() || '';
+  if (whatsappWebhookUrl && !/^https?:\/\//i.test(whatsappWebhookUrl)) problems.push('WHATSAPP_WEBHOOK_URL must start with http:// or https:// (or be left empty).');
+  const adminDbUser = env.CLIENTS_ADMIN_DB_USER?.trim() || '';
+  const adminDbPassword = env.CLIENTS_ADMIN_DB_PASSWORD?.trim() || '';
+  if (adminDbUser && !adminDbPassword) problems.push('CLIENTS_ADMIN_DB_PASSWORD is required when CLIENTS_ADMIN_DB_USER is set.');
+  const ownerAdminEmails = (env.OWNER_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
   const config: AppConfig = {
     nodeEnv,
     isProd,
@@ -273,6 +334,13 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         max: int('CHAT_RATE_LIMIT_MAX', 40, { min: 1 }),
         windowMs: int('CHAT_RATE_LIMIT_WINDOW_MINUTES', 15, { min: 1 }) * 60_000,
       },
+    },
+    clients: { dbName: clientsDbName, accountsUrl, bookingsUrl, portalUrl, cookieDomain, mailFrom: env.CLIENTS_MAIL_FROM?.trim() || 'Byte Bun Bookings <bookings@bytebuntech.com>',
+      whatsappWebhookUrl,
+      whatsappWebhookSecret: env.WHATSAPP_WEBHOOK_SECRET?.trim() || '',
+      adminDbUser,
+      adminDbPassword,
+      ownerAdminEmails,
     },
   };
 

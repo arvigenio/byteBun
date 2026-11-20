@@ -7,6 +7,8 @@ export interface ApiErrorBody {
   message: string;
   /** Per-field messages, shown next to the form fields. */
   fields?: Record<string, string>;
+  /** Bookings: the existing bookings a change would affect (e.g. blocking a date), for the UI to list. */
+  conflicts?: unknown[];
 }
 
 export class ApiError extends HttpException {

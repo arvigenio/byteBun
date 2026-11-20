@@ -9,6 +9,8 @@ import { getAdminSession, isAdminApiPath } from './auth/admin-session';
 import type { Auth } from './auth/auth';
 import { AUTH } from './auth/auth.module';
 import { requestMeta } from './auth/request-meta';
+import { CLIENTS_AUTH } from './clients/client-context';
+import { CLIENTS_AUTH_BASE_PATH, type ClientsAuth } from './clients/clients-auth';
 import { config } from './config/config';
 import { PinoNestLogger } from './logging/logger';
 import { requestLog } from './logging/request-log.middleware';
@@ -54,8 +56,10 @@ export async function createApp({ serveStatic = config.isProd } = {}): Promise<N
   const auth = app.get<Auth>(AUTH);
   const http = app.getHttpAdapter().getInstance() as Express;
 
-  // Admin API and sign-in: never cached, never indexed.
-  http.use(['/api/auth', '/api/admin'], (_req: Request, res: Response, next: NextFunction) => {
+  const clientsAuth = app.get<ClientsAuth>(CLIENTS_AUTH);
+
+  // Admin and client APIs and sign-in: never cached, never indexed.
+  http.use(['/api/auth', '/api/admin', '/api/accounts', '/api/client'], (_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     next();
@@ -63,6 +67,8 @@ export async function createApp({ serveStatic = config.isProd } = {}): Promise<N
 
   // Better Auth reads the raw request body itself, so it goes BEFORE express.json().
   http.all('/api/auth/*splat', toNodeHandler(auth));
+  // Client sign-in (accounts.bytebuntech.com, clients/clients-auth.ts): its own instance and cookies.
+  http.all(`${CLIENTS_AUTH_BASE_PATH}/*splat`, toNodeHandler(clientsAuth));
 
   // Signed out (or only half signed in) -> 401 for anything under /api/admin, even routes that
   // don't exist. AdminSessionGuard checks again per route.
@@ -80,6 +86,7 @@ export async function createApp({ serveStatic = config.isProd } = {}): Promise<N
   app.use(express.json({ limit: '10kb' }));
   app.use(bodyParserErrors);
   app.enableCors({ origin: config.frontendOrigins, methods: ['GET', 'POST'] });
+  // The client hosts call /api on their own origin (same-origin), so they need no CORS.
 
   app.setGlobalPrefix('api');
   if (serveStatic) mountStaticSite(app, config, auth);

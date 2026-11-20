@@ -4,6 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { getAdminSession } from '../auth/admin-session';
 import type { Auth } from '../auth/auth';
+import { surfaceOf, isClientSurface } from '../clients/hosts';
 import { type AppConfig, COMMON_LOGIN_PATHS } from '../config/config';
 import { logger } from '../logging/logger';
 
@@ -36,6 +37,28 @@ export function mountStaticSite(app: NestExpressApplication, cfg: AppConfig, aut
   }
   const hasAdmin = fs.existsSync(adminHtml);
   if (!hasAdmin) logger.warn({ staticDir: cfg.staticDir }, 'No built admin page (admin.html) found; the admin area is unavailable');
+
+  // Client hosts (accounts / bookings / clientportal): the client app (frontend/client.html) for
+  // every page, real files (assets, icons, sw.js) as they are. None of the main site's pages or
+  // admin rules apply there.
+  const clientHtml = path.join(cfg.staticDir, 'client.html');
+  const hasClient = fs.existsSync(clientHtml);
+  if (!hasClient) logger.warn({ staticDir: cfg.staticDir }, 'No built client app (client.html) found; the client hosts are unavailable');
+  const clientFiles = express.static(cfg.staticDir, {
+    index: false,
+    setHeaders(res, filePath) {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      else res.setHeader('Cache-Control', 'no-cache');
+    },
+  });
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!isClientSurface(surfaceOf(cfg, req.headers.host)) || isApiPath(req.path)) return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') return notFound(res);
+    const sendClient = () => (hasClient ? res.set('Cache-Control', 'no-cache').sendFile(clientHtml) : notFound(res));
+    // HTML files of the other apps are never served on client hosts.
+    if (/\.html?$/i.test(req.path)) return sendClient();
+    clientFiles(req, res, sendClient);
+  });
 
   const sendAdmin = (res: Response) =>
     res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Referrer-Policy': 'no-referrer' }).sendFile(adminHtml);

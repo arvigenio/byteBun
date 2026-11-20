@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- The client apps: accounts / Bookings / client portal (src/client/). One app on several
+         hosts; /client/boot.js sets the product name, icon, colors and install manifest for the
+         host before the app loads (an external file: the CSP allows no inline scripts). -->
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0F766E" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Byte Bun Bookings</title>
+    <script src="/client/boot.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/client/main.jsx"></script>
+  </body>
+</html>

@@ -49,6 +49,24 @@ The `npm run` scripts only wrap Docker. You don't need Node installed on your PC
 
 Editing files under `frontend/src` or `backend/src` reloads the running app automatically; no rebuild needed (the API recompiles its TypeScript and restarts, which takes a few seconds). Rebuild (`docker compose up --build`) only after changing a Dockerfile.
 
+## Client apps (Byte Bun Bookings, client portal)
+
+The same app also serves Byte Bun's **client** products, each on its own host. The host decides the look; the client's plan decides the features:
+
+| Host | Development | What |
+|---|---|---|
+| accounts.bytebuntech.com | http://accounts.localhost:5173 | Sign-in (emailed code, no passwords), new business setup, team invitations |
+| bookings.bytebuntech.com | http://bookings.localhost:5173 | Byte Bun Bookings: the business's app at `/app`, public booking pages at `/{slug}`, the customer's cancel/reschedule link at `/manage` |
+| clientportal.bytebuntech.com | http://clientportal.localhost:5173 | Client portal for packaged clients (Bookings at `/bookings`) |
+
+- `*.localhost` opens on your own PC in Chrome, Edge and Firefox, with no hosts-file changes. In development, cookies stay on one host, so you sign in on each host separately. In production one sign-in covers all three (`CLIENT_COOKIE_DOMAIN`).
+- Sign-in codes and booking emails show in the API log in development (`docker compose logs -f api`), like the admin emails.
+- Data lives in a **separate database**, `clients_db`, on the same PostgreSQL server, with one schema per area: `auth` (users, businesses, members, invitations), `billing` (plans, entitlements, account status, audit events) and `booking`. It is created and migrated when the API starts. Schema files: `backend/prisma-clients/` (one `.prisma` file per schema). New migration: `docker compose exec api npm run clients:migrate:new -- --name what_changed`.
+- Every client API request checks, in order: signed in, member of the business, business active, **plan includes the app/feature**, then **the role allows it** (owner, admin, staff). See `backend/src/clients/client-context.ts` and `roles.ts`.
+- Plans (`billing.plans`) match the pricing on bytebuntech.com: **Free** (60 bookings a month, cancelled ones count; 3 services; 2 team members; email reminders 1 and/or 2 days before; bookings deleted 60 days after the appointment, with a warning email and CSV export a week before; "Powered by" footer), **Bookings Pro**, **Premium** and **Growth**. New businesses start on Free.
+- Reminders and messages go through a queue table (`booking.notifications`) that the API works through every few seconds. WhatsApp messages are handed to n8n (`WHATSAPP_WEBHOOK_URL`); without it they are emailed.
+- **Admin site → Clients:** change a client's plan and add-ons, deactivate / reactivate, delete (type the name; 30 days to restore, then removed for good), export their bookings, and the audit log of every change. Only `OWNER_ADMIN_EMAILS` may delete (every admin when unset). Optional limited database login: `docs/CLIENTS-DB-ADMIN-USER.sql`.
+
 ## Admin site
 
 A private admin area for the two Byte Bun admins:

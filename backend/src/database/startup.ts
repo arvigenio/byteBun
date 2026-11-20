@@ -1,5 +1,7 @@
-// Startup sequence, run before Nest starts: wait for PostgreSQL, create the app database if
-// missing, then apply pending Prisma migrations (prisma/migrations). Safe to run on every start.
+// Startup sequence, run before Nest starts: wait for PostgreSQL, create the two databases if
+// missing (the admin/landing database DB_NAME and the clients database CLIENTS_DB_NAME), then
+// apply pending Prisma migrations to each (prisma/migrations, prisma-clients/migrations).
+// Safe to run on every start.
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { backendRoot, config } from '../config/config';
@@ -31,8 +33,7 @@ async function waitForPostgres({ attempts = 20, baseDelayMs = 1_000, maxDelayMs 
   }
 }
 
-async function ensureDatabase(admin: Client) {
-  const name = config.db.name;
+async function ensureDatabase(admin: Client, name: string) {
   const rows = await admin.$queryRaw<unknown[]>`SELECT 1 FROM pg_database WHERE datname = ${name}`;
   if (rows.length === 0) {
     // CREATE DATABASE can't take a parameter. The name is safe to quote as an identifier:
@@ -44,13 +45,22 @@ async function ensureDatabase(admin: Client) {
   }
 }
 
-function runPrismaMigrateDeploy(): Promise<void> {
+/** The clients database's connection string (prisma.clients.config.ts builds the same one). */
+export const clientsDatabaseUrl = () =>
+  process.env.CLIENTS_DATABASE_URL || buildDatabaseUrl({ ...process.env, DB_NAME: config.clients.dbName });
+
+function runPrismaMigrateDeploy(target: 'app' | 'clients'): Promise<void> {
   const prismaCli = path.join(path.dirname(require.resolve('prisma/package.json')), 'build/index.js');
+  const args = target === 'app' ? ['migrate', 'deploy'] : ['migrate', 'deploy', '--config', 'prisma.clients.config.ts'];
+  const env =
+    target === 'app'
+      ? { ...process.env, DATABASE_URL: process.env.DATABASE_URL || buildDatabaseUrl() }
+      : { ...process.env, CLIENTS_DB_NAME: config.clients.dbName, CLIENTS_DATABASE_URL: clientsDatabaseUrl() };
 
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [prismaCli, 'migrate', 'deploy'], {
+    const child = spawn(process.execPath, [prismaCli, ...args], {
       cwd: backendRoot,
-      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL || buildDatabaseUrl() },
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const forward = (level: 'info' | 'warn') => (chunk: Buffer) => {
@@ -59,7 +69,7 @@ function runPrismaMigrateDeploy(): Promise<void> {
     child.stdout.on('data', forward('info'));
     child.stderr.on('data', forward('warn'));
     child.on('error', reject);
-    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`prisma migrate deploy exited with code ${code}`))));
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`prisma migrate deploy (${target}) exited with code ${code}`))));
   });
 }
 
@@ -67,12 +77,14 @@ export async function prepareDatabase() {
   logger.info({ host: config.db.host, port: config.db.port }, 'Step 1/3: waiting for PostgreSQL');
   const admin = await waitForPostgres();
   try {
-    logger.info('Step 2/3: making sure the application database exists');
-    await ensureDatabase(admin);
+    logger.info('Step 2/3: making sure the application and clients databases exist');
+    await ensureDatabase(admin, config.db.name);
+    await ensureDatabase(admin, config.clients.dbName);
   } finally {
     await admin.$disconnect();
   }
   logger.info('Step 3/3: applying database migrations');
-  await runPrismaMigrateDeploy();
+  await runPrismaMigrateDeploy('app');
+  await runPrismaMigrateDeploy('clients');
   logger.info('Migrations are up to date');
 }

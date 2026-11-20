@@ -81,6 +81,20 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-5-5}
       CHAT_RATE_LIMIT_MAX: ${CHAT_RATE_LIMIT_MAX:-40}
       CHAT_RATE_LIMIT_WINDOW_MINUTES: ${CHAT_RATE_LIMIT_WINDOW_MINUTES:-15}
+      # Client apps (accounts / Bookings / client portal): same app, own hosts, own database on
+      # the same PostgreSQL server. Dev: http://bookings.localhost:5173 etc. (*.localhost needs no
+      # hosts-file entry in Chrome, Edge or Firefox). Cookies are per host in dev.
+      CLIENTS_DB_NAME: ${CLIENTS_DB_NAME:-clients_db}
+      ACCOUNTS_URL: ${ACCOUNTS_URL:-http://accounts.localhost:5173}
+      BOOKINGS_URL: ${BOOKINGS_URL:-http://bookings.localhost:5173}
+      PORTAL_URL: ${PORTAL_URL:-http://clientportal.localhost:5173}
+      CLIENT_COOKIE_DOMAIN: ${CLIENT_COOKIE_DOMAIN:-}
+      CLIENTS_MAIL_FROM: ${CLIENTS_MAIL_FROM:-Byte Bun Bookings <bookings@bytebuntech.com>}
+      WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
+      OWNER_ADMIN_EMAILS: ${OWNER_ADMIN_EMAILS:-}
+      CLIENTS_ADMIN_DB_USER: ${CLIENTS_ADMIN_DB_USER:-}
+      CLIENTS_ADMIN_DB_PASSWORD: ${CLIENTS_ADMIN_DB_PASSWORD:-}
       # Every email goes to this inbox instead of its real recipients (development only).
       TESTING_EMAIL_ADDRESS: ${TESTING_EMAIL_ADDRESS:-}
       CHECKPOINT_DISABLE: "1" # no Prisma CLI telemetry/update checks

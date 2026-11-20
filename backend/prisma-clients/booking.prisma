@@ -1,0 +1,198 @@
+// ============================================================================================
+// booking: the Bookings app.
+// ============================================================================================
+
+model BookingSettings {
+  organizationId      String   @id @map("organization_id")
+  // Public page: bookings.bytebuntech.com/{slug}
+  slug                String   @unique @db.VarChar(60)
+  businessName        String   @map("business_name") @db.VarChar(120)
+  // IANA zone, e.g. America/Toronto.
+  timeZone            String   @map("time_zone") @db.VarChar(64)
+  // slots | date (no interval: customers pick a day, first come first served)
+  mode                String   @default("slots") @db.VarChar(10)
+  intervalMinutes     Int      @default(30) @map("interval_minutes")
+  bookersPerSlot      Int      @default(1) @map("bookers_per_slot")
+  // null = no limit
+  maxPerDay           Int?     @map("max_per_day")
+  minNoticeMinutes    Int      @default(120) @map("min_notice_minutes")
+  windowDays          Int      @default(60) @map("window_days")
+  // Customers can't cancel/reschedule within this many hours (null = until it starts).
+  changeCutoffHours   Int?     @map("change_cutoff_hours")
+  phone               String?  @db.VarChar(40)
+  contactEmail        String?  @map("contact_email") @db.VarChar(254)
+  // Shown on the public page.
+  pageInstructions    String?  @map("page_instructions") @db.VarChar(2000)
+  // Rich text (sanitized HTML) shown ONLY in confirmations and reminders.
+  privateInstructions String?  @map("private_instructions") @db.VarChar(5000)
+  primaryColor        String   @default("#0F766E") @map("primary_color") @db.VarChar(7)
+  accentColor         String?  @map("accent_color") @db.VarChar(7)
+  backgroundColor     String?  @map("background_color") @db.VarChar(7)
+  // light | dark | custom
+  theme               String   @default("light") @db.VarChar(10)
+  font                String   @default("system") @db.VarChar(20)
+  buttonStyle         String   @default("rounded") @map("button_style") @db.VarChar(10)
+  // Owner alerts: {"newBooking": ["email"], "cancellation": ["email"], "reschedule": ["email"]}
+  ownerAlerts         Json     @default("{}") @map("owner_alerts")
+  // WhatsApp number for owner alerts (paid plans).
+  alertPhone          String?  @map("alert_phone") @db.VarChar(40)
+  // Reminders to customers: [{ "offsetMinutes": 1440, "channel": "email" }], at most 3.
+  // Free: 1440 and/or 2880, email. Paid: down to 60 minutes, email or whatsapp.
+  reminders           Json     @default("[{\"offsetMinutes\": 1440, \"channel\": \"email\"}]")
+  // Email customers marked as no-show, inviting them to book again.
+  noShowFollowUp      Boolean  @default(true) @map("no_show_follow_up")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("settings")
+  @@schema("booking")
+}
+
+// Opening hours, one row per open weekday (0 = Sunday ... 6 = Saturday). No row = closed.
+model WeeklyHours {
+  id             Int    @id @default(autoincrement())
+  organizationId String @map("organization_id")
+  weekday        Int    @db.SmallInt
+  // Minutes after local midnight, e.g. 540 = 9:00.
+  startMinute    Int    @map("start_minute") @db.SmallInt
+  endMinute      Int    @map("end_minute") @db.SmallInt
+
+  @@unique([organizationId, weekday])
+  @@map("weekly_hours")
+  @@schema("booking")
+}
+
+// Breaks (lunch ...) inside a weekday's hours.
+model BreakPeriod {
+  id             Int    @id @default(autoincrement())
+  organizationId String @map("organization_id")
+  weekday        Int    @db.SmallInt
+  startMinute    Int    @map("start_minute") @db.SmallInt
+  endMinute      Int    @map("end_minute") @db.SmallInt
+
+  @@index([organizationId])
+  @@map("breaks")
+  @@schema("booking")
+}
+
+// Closed days: a single date (start = end) or a range, inclusive, in the business's dates.
+model BlockedDate {
+  id             Int      @id @default(autoincrement())
+  organizationId String   @map("organization_id")
+  startDate      DateTime @map("start_date") @db.Date
+  endDate        DateTime @map("end_date") @db.Date
+  reason         String?  @db.VarChar(200)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, startDate])
+  @@map("blocked_dates")
+  @@schema("booking")
+}
+
+model Service {
+  id              Int       @id @default(autoincrement())
+  organizationId  String    @map("organization_id")
+  name            String    @db.VarChar(120)
+  description     String?   @db.VarChar(1000)
+  durationMinutes Int       @map("duration_minutes")
+  bufferMinutes   Int       @default(0) @map("buffer_minutes")
+  // in_person | online | phone
+  locationType    String    @default("in_person") @map("location_type") @db.VarChar(12)
+  address         String?   @db.VarChar(300)
+  // Private: only in confirmations and reminders.
+  meetingUrl      String?   @map("meeting_url") @db.VarChar(500)
+  // Private rich text (sanitized HTML), confirmations and reminders only.
+  instructions    String?   @db.VarChar(5000)
+  position        Int       @default(0)
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  bookings        Booking[]
+
+  @@index([organizationId, position])
+  @@map("services")
+  @@schema("booking")
+}
+
+// The people who book (patients, customers). One row per email per business.
+model Customer {
+  id             Int       @id @default(autoincrement())
+  organizationId String    @map("organization_id")
+  name           String    @db.VarChar(120)
+  email          String    @db.VarChar(254)
+  phone          String?   @db.VarChar(40)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  bookings       Booking[]
+
+  @@unique([organizationId, email])
+  @@map("customers")
+  @@schema("booking")
+}
+
+model Booking {
+  id             Int            @id @default(autoincrement())
+  organizationId String         @map("organization_id")
+  serviceId      Int            @map("service_id")
+  service        Service        @relation(fields: [serviceId], references: [id])
+  customerId     Int            @map("customer_id")
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  // The business's date of the booking (used for daily limits and date-only bookings).
+  localDate      DateTime       @map("local_date") @db.Date
+  // Time slots: the appointment. Date-only: the day's opening time (for reminders and sorting).
+  startsAt       DateTime       @map("starts_at") @db.Timestamptz(3)
+  endsAt         DateTime       @map("ends_at") @db.Timestamptz(3)
+  // endsAt + the service's buffer: the time this booking keeps its slot.
+  blockedUntil   DateTime       @map("blocked_until") @db.Timestamptz(3)
+  dateOnly       Boolean        @default(false) @map("date_only")
+  // confirmed | cancelled
+  status         String         @default("confirmed") @db.VarChar(12)
+  cancelledAt    DateTime?      @map("cancelled_at") @db.Timestamptz(3)
+  // customer | business | system
+  cancelledBy    String?        @map("cancelled_by") @db.VarChar(12)
+  cancelReason   String?        @map("cancel_reason") @db.VarChar(500)
+  // Marked by the business when the customer didn't come.
+  noShowAt       DateTime?      @map("no_show_at") @db.Timestamptz(3)
+  // Bumped on each reschedule (calendar SEQUENCE).
+  sequence       Int            @default(0)
+  // Behind the customer's cancel/reschedule link (src/clients/booking/manage-token.ts).
+  manageNonce    String         @map("manage_nonce") @db.Char(32)
+  note           String?        @db.VarChar(1000)
+  // public (booking page) | business (added by the owner/staff)
+  source         String         @default("public") @db.VarChar(10)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  notifications  Notification[]
+
+  @@index([organizationId, localDate])
+  @@index([organizationId, startsAt])
+  @@index([organizationId, createdAt])
+  @@map("bookings")
+  @@schema("booking")
+}
+
+// Notification queue: one row per message to send. A worker sends the due rows (email here;
+// WhatsApp rows are handed to n8n).
+model Notification {
+  id             Int       @id @default(autoincrement())
+  organizationId String    @map("organization_id")
+  bookingId      Int?      @map("booking_id")
+  booking        Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  // confirmation | cancellation | reschedule | owner_new | owner_cancel | owner_reschedule | reminder | ...
+  kind           String    @db.VarChar(30)
+  // email | whatsapp
+  channel        String    @default("email") @db.VarChar(10)
+  recipient      String    @db.VarChar(254)
+  sendAt         DateTime  @map("send_at") @db.Timestamptz(3)
+  // pending | sending | sent | failed | cancelled | skipped | paused (business deactivated)
+  status         String    @default("pending") @db.VarChar(10)
+  attempts       Int       @default(0)
+  lastError      String?   @map("last_error") @db.VarChar(500)
+  sentAt         DateTime? @map("sent_at") @db.Timestamptz(3)
+  payload        Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([status, sendAt])
+  @@index([bookingId])
+  @@map("notifications")
+  @@schema("booking")
+}

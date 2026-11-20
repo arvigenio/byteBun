@@ -1,0 +1,28 @@
+// The CLIENTS database (clients_db): everything that belongs to Byte Bun's clients, kept apart
+// from the admin/landing database (prisma/schema.prisma). Same PostgreSQL server, separate
+// database, one PostgreSQL schema per area:
+//
+//   auth     users, sessions, organizations (= a client business), members, invitations
+//   billing  plans, add-ons, subscriptions, entitlements, account status, events
+//   booking  settings, hours, breaks, blocked dates, services, customers, bookings, notifications
+//   (future) one schema per app (invoice, survey, forms ...)
+//
+// Split by PostgreSQL schema: auth.prisma, billing.prisma, booking.prisma (Prisma reads the whole
+// folder; models can reference each other across files).
+//
+// After changing it, create a migration (the dev API applies it on its next restart):
+//   docker compose exec api npm run clients:migrate:new -- --name describe_change
+//
+// All times are stored in UTC (timestamptz). Wall-clock values that belong to the business
+// (opening hours, blocked dates) are stored as minutes after midnight / plain dates and are
+// read in the business's IANA time zone (booking.settings.time_zone).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@bytebun/clients-db"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["auth", "billing", "booking"]
+}

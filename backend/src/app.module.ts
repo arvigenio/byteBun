@@ -6,6 +6,7 @@ import { AdminSessionGuard } from './auth/admin-session';
 import { AuthModule } from './auth/auth.module';
 import { BookingModule } from './booking/booking.module';
 import { ChatModule } from './chat/chat.module';
+import { ClientsModule } from './clients/clients.module';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 import { ApiThrottlerGuard, rateLimitOptions } from './common/rate-limit';
 import { APP_CONFIG, type AppConfig } from './config/config';
@@ -35,6 +36,8 @@ import { TasksModule } from './tasks/tasks.module';
     ProspectsModule,
     TasksModule,
     ChatModule,
+    // Client apps: accounts, Bookings, client portal (src/clients/, clients database).
+    ClientsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ApiThrottlerGuard },

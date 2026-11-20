@@ -1,0 +1,114 @@
+// ============================================================================================
+// billing: what each client pays for, and therefore what they may use.
+// ============================================================================================
+
+// Plans: free (Bookings freemium), bookings (single app, paid), starter, ... Prices are not
+// stored yet (to be provided).
+model Plan {
+  code      String         @id @db.VarChar(40)
+  name      String         @db.VarChar(80)
+  // Apps the plan includes, e.g. {bookings}. src/clients/entitlements.ts has the app catalog.
+  apps      String[]
+  // Feature flags, e.g. {bookings.unlimited, bookings.whatsapp}.
+  features  String[]
+  // Numeric limits, e.g. {"bookings.monthly": 60, "bookings.services": 3}. Missing = unlimited.
+  limits    Json           @default("{}")
+  // Packaged plans land on the client portal even with a single app.
+  portal    Boolean        @default(false)
+  sort      Int            @default(0)
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  subs      Subscription[]
+
+  @@map("plans")
+  @@schema("billing")
+}
+
+model Addon {
+  code      String              @id @db.VarChar(40)
+  name      String              @db.VarChar(80)
+  apps      String[]
+  features  String[]
+  limits    Json                @default("{}")
+  active    Boolean             @default(true)
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  subs      SubscriptionAddon[]
+
+  @@map("addons")
+  @@schema("billing")
+}
+
+// One subscription per organization (its current plan).
+model Subscription {
+  id             Int                 @id @default(autoincrement())
+  organizationId String              @unique @map("organization_id")
+  planCode       String              @map("plan_code") @db.VarChar(40)
+  plan           Plan                @relation(fields: [planCode], references: [code])
+  // active | paused (client deactivated) | cancelled
+  status         String              @default("active") @db.VarChar(20)
+  currency       String              @default("USD") @db.Char(3)
+  startedAt      DateTime            @default(now()) @map("started_at") @db.Timestamptz(3)
+  updatedAt      DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  addons         SubscriptionAddon[]
+
+  @@map("subscriptions")
+  @@schema("billing")
+}
+
+model SubscriptionAddon {
+  subscriptionId Int          @map("subscription_id")
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  addonCode      String       @map("addon_code") @db.VarChar(40)
+  addon          Addon        @relation(fields: [addonCode], references: [code])
+  addedAt        DateTime     @default(now()) @map("added_at") @db.Timestamptz(3)
+
+  @@id([subscriptionId, addonCode])
+  @@map("subscription_addons")
+  @@schema("billing")
+}
+
+// What an organization may use right now: plan + add-ons, resolved (src/clients/entitlements.ts,
+// rebuilt on every plan change). One row per key:
+//   app:bookings                    value null
+//   feature:bookings.whatsapp       value null
+//   limit:bookings.monthly          value 60
+model Entitlement {
+  organizationId String   @map("organization_id")
+  key            String   @db.VarChar(80)
+  value          Int?
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@id([organizationId, key])
+  @@map("entitlements")
+  @@schema("billing")
+}
+
+// Deactivation / deletion state, set from the admin site. No row = active.
+model AccountStatus {
+  organizationId String    @id @map("organization_id")
+  // active | deactivated | deleted (soft delete, removed after delete_after)
+  status         String    @default("active") @db.VarChar(20)
+  reason         String?   @db.VarChar(500)
+  changedAt      DateTime  @default(now()) @map("changed_at") @db.Timestamptz(3)
+  changedBy      String?   @map("changed_by") @db.VarChar(254)
+  deleteAfter    DateTime? @map("delete_after") @db.Timestamptz(3)
+
+  @@map("account_status")
+  @@schema("billing")
+}
+
+// Audit trail: plan changes, deactivate / reactivate / delete / restore, sign-ups.
+model BillingEvent {
+  id             Int      @id @default(autoincrement())
+  organizationId String   @map("organization_id")
+  type           String   @db.VarChar(40)
+  data           Json     @default("{}")
+  // Who did it: an admin's email, a client user's email, or "system".
+  actor          String   @db.VarChar(254)
+  reason         String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([organizationId, createdAt])
+  @@map("events")
+  @@schema("billing")
+}

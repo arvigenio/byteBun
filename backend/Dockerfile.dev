@@ -4,8 +4,9 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 
 # Schema and Prisma config first, because `npm ci` runs `prisma generate` (postinstall).
-COPY package.json package-lock.json prisma.config.ts ./
+COPY package.json package-lock.json prisma.config.ts prisma.clients.config.ts ./
 COPY prisma ./prisma
+COPY prisma-clients ./prisma-clients
 COPY src/database/database-url.ts ./src/database/database-url.ts
 RUN npm ci --no-audit --no-fund && cp package-lock.json node_modules/.lock-stamp
 

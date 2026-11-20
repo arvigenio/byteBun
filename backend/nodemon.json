@@ -1,8 +1,12 @@
 {
   "//": "Development (docker compose). Polls because Windows bind mounts don't forward file events into containers. Regenerates the Prisma client and rebuilds on every change, so schema and code edits apply live.",
   "legacyWatch": true,
-  "watch": ["src", "prisma"],
+  "watch": [
+    "src",
+    "prisma",
+    "prisma-clients"
+  ],
   "ext": "ts,json,prisma,sql",
   "delay": 500,
-  "exec": "prisma generate && nest build && node dist/main.js"
+  "exec": "npm run db:generate && nest build && node dist/main.js"
 }

@@ -23,13 +23,14 @@ FROM node:22-alpine AS api-build
 RUN apk add --no-cache openssl
 WORKDIR /app/backend
 # The schema and Prisma config must be present because `npm ci` runs `prisma generate` (postinstall).
-COPY backend/package.json backend/package-lock.json backend/prisma.config.ts ./
+COPY backend/package.json backend/package-lock.json backend/prisma.config.ts backend/prisma.clients.config.ts ./
 COPY backend/prisma ./prisma
+COPY backend/prisma-clients ./prisma-clients
 COPY backend/src/database/database-url.ts ./src/database/database-url.ts
 RUN npm ci --no-audit --no-fund
 COPY backend/tsconfig.json backend/nest-cli.json ./
 COPY backend/src ./src
-RUN npm run build  && npm prune --omit=dev --no-audit --no-fund  && npx prisma generate
+RUN npm run build  && npm prune --omit=dev --no-audit --no-fund  && npm run db:generate
 
 # ---- Stage 3: runtime ----
 FROM node:22-alpine
@@ -41,8 +42,9 @@ COPY --from=api-build /app/backend/node_modules ./node_modules
 COPY --from=api-build /app/backend/dist ./dist
 # Prisma CLI is a runtime dependency here: the app runs `prisma migrate deploy` on startup,
 # which reads prisma.config.ts (and the connection-string helper it imports).
-COPY backend/package.json backend/prisma.config.ts ./
+COPY backend/package.json backend/prisma.config.ts backend/prisma.clients.config.ts ./
 COPY backend/prisma ./prisma
+COPY backend/prisma-clients ./prisma-clients
 COPY backend/src/database/database-url.ts ./src/database/database-url.ts
 COPY --from=web-build /build/frontend/dist /app/frontend/dist
 USER node
