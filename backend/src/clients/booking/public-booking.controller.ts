@@ -18,12 +18,15 @@ import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseIntPipe, P
 import type { Request } from 'express';
 import type * as yup from 'yup';
 import { ApiError } from '../../common/api-error';
+import { APP_CONFIG, type AppConfig } from '../../config/config';
 import { StrictRateLimit } from '../../common/rate-limit';
 import { YupValidationPipe } from '../../common/yup-validation.pipe';
+import { richInstructions } from '../client-emails';
 import { ClientsDb } from '../clients-db';
 import { orgStatus } from '../client-context';
 import { hasFeature, limitOf, loadEntitlements } from '../entitlements';
 import { BookingEngine, errors, loadRules, monthlyUsage, occupiedBetween } from './booking-engine';
+import { checkInUrl, formatCheckInCode } from './check-in';
 import { MANAGE_TOKENS } from './notifications';
 import type { ManageTokens } from './manage-token';
 import { rangeAvailability } from './schedule';
@@ -38,6 +41,7 @@ export class PublicBookingController {
     private readonly db: ClientsDb,
     private readonly engine: BookingEngine,
     @Inject(MANAGE_TOKENS) private readonly tokens: ManageTokens,
+    @Inject(APP_CONFIG) private readonly cfg: AppConfig,
   ) {}
 
   /** The business behind a slug, and whether it takes online bookings right now. */
@@ -77,7 +81,7 @@ export class PublicBookingController {
         slug: s.slug,
         timeZone: s.timeZone,
         mode: s.mode,
-        instructions: s.pageInstructions,
+        instructions: richInstructions(s.pageInstructions), // safe HTML (older plain text converted)
         phone: s.phone,
         windowDays: s.windowDays,
       },
@@ -104,7 +108,8 @@ export class PublicBookingController {
     const start = isDate(from) ? from : todayIn(rules.timeZone);
     const end = isDate(to) && to >= start ? (to > addDays(start, 41) ? addDays(start, 41) : to) : addDays(start, 30);
     const occupied = await occupiedBetween(this.db, settings.organizationId, start, end);
-    const days = status === 'month_full' ? [] : rangeAvailability(rules, service, start, end, occupied);
+    // Monthly limit reached (free plan): the calendar still shows, every day disabled, until the 1st.
+    const days = rangeAvailability(rules, service, start, end, occupied).map((d) => (status === 'month_full' ? { ...d, status: 'closed' as const, slots: [], spotsLeft: 0 } : d));
     return { timeZone: rules.timeZone, mode: rules.mode, status, days };
   }
 
@@ -168,6 +173,11 @@ export class PublicBookingController {
         dateOnly: b.dateOnly,
         service: { id: b.service.id, name: b.service.name, durationMinutes: b.service.durationMinutes, locationType: b.service.locationType, address: b.service.address },
         customerName: b.customer.name,
+        // In-person: the attendance code, shown with its QR code for the front desk.
+        checkIn:
+          b.status === 'confirmed' && b.service.locationType === 'in_person'
+            ? { code: formatCheckInCode(b.checkInCode), url: checkInUrl(this.cfg.clients.bookingsUrl, b.checkInCode), checkedInAt: b.checkedInAt }
+            : null,
       },
     };
   }

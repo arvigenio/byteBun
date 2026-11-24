@@ -65,6 +65,9 @@ export const api = createApi({
     cancelBooking: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/items/${id}/cancel`, method: 'post', body }), invalidatesTags: ['Bookings', 'Overview'] }),
     markNoShow: b.mutation({ query: ({ id, noShow }) => ({ url: `/client/bookings/items/${id}/no-show`, method: 'post', body: { noShow } }), invalidatesTags: ['Bookings'] }),
     rescheduleBooking: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/items/${id}/reschedule`, method: 'post', body }), invalidatesTags: ['Bookings', 'Overview'] }),
+    // Attendance: { code } (typed or scanned) or { id }, force -> { state, checkedIn, booking, today }
+    checkIn: b.mutation({ query: (body) => ({ url: '/client/bookings/check-in', method: 'post', body }), invalidatesTags: ['Bookings'] }),
+    undoCheckIn: b.mutation({ query: (id) => ({ url: `/client/bookings/items/${id}/check-in/undo`, method: 'post', body: {} }), invalidatesTags: ['Bookings'] }),
     adminAvailability: b.query({ query: (params) => ({ url: '/client/bookings/availability', params }), keepUnusedDataFor: 0, providesTags: ['Bookings'] }),
 
     // Public (no login)
@@ -109,6 +112,8 @@ export const {
   useCancelBookingMutation,
   useRescheduleBookingMutation,
   useMarkNoShowMutation,
+  useCheckInMutation,
+  useUndoCheckInMutation,
   useAdminAvailabilityQuery,
   usePublicPageQuery,
   usePublicAvailabilityQuery,

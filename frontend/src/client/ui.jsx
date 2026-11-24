@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useId, useRef } from 'react';
+import { createContext, forwardRef, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { onRouteLinkClick } from '../lib/router.js';
 
 // The client apps' UI kit. Tokens only (client.css); the brand color follows the host / business.
@@ -179,27 +179,55 @@ export function Empty({ title, children, action }) {
   );
 }
 
-/** A modal dialog (native <dialog>: focus trap and Escape for free). */
-export function Dialog({ open, onClose, title, children, footer, wide = false }) {
+/**
+ * A modal dialog (native <dialog>: focus trap for free). Guarded against accidental closes:
+ * a click on the backdrop does nothing, Escape and × ask first when `dirty` (unsaved input),
+ * and nothing closes it while `busy` (saving). Buttons in the footer call onClose directly.
+ */
+export function Dialog({ open, onClose, title, children, footer, wide = false, dirty = false, busy = false }) {
   const ref = useRef(null);
+  const closing = useRef(false);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
+    if (!open && d.open) {
+      closing.current = true;
+      d.close();
+    }
   }, [open]);
+  const confirm = useConfirm();
+  const asking = useRef(false);
+  const requestClose = async () => {
+    if (busy || asking.current) return;
+    if (dirty) {
+      asking.current = true;
+      const sure = await confirm({ title: 'Discard your changes?', body: 'What you entered in this window will be lost.', action: 'Discard', cancel: 'Keep editing' });
+      asking.current = false;
+      if (!sure) return;
+    }
+    onClose?.();
+  };
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
-      onClick={(e) => e.target === ref.current && onClose?.()}
+      onCancel={(e) => {
+        e.preventDefault();
+        requestClose();
+      }}
+      onClose={() => {
+        // The browser can force a close (e.g. Escape pressed twice): reopen, then ask as usual.
+        if (closing.current) return void (closing.current = false);
+        ref.current?.showModal();
+        requestClose();
+      }}
       className={cx('m-auto w-[calc(100%-32px)] rounded-card border border-line bg-surface p-0 text-ink shadow-xl backdrop:bg-black/40', wide ? 'max-w-2xl' : 'max-w-md')}
     >
       {open && (
         <div className="flex max-h-[85vh] flex-col">
           <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
             <h2 className="text-base font-semibold">{title}</h2>
-            <button type="button" onClick={onClose} className="cursor-pointer rounded-md p-1 text-faint hover:bg-sunken hover:text-ink" aria-label="Close">
+            <button type="button" onClick={requestClose} disabled={busy} className="cursor-pointer rounded-md p-1 text-faint hover:bg-sunken hover:text-ink" aria-label="Close">
               <Icon d="M6 6l12 12M18 6L6 18" />
             </button>
           </header>
@@ -235,4 +263,120 @@ export const ICONS = {
   video: 'M15 10l5-3v10l-5-3M4 6h11v12H4z',
   phone: 'M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2',
   star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z',
+  pencil: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
+  eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 15a3 3 0 100-6 3 3 0 000 6z',
+  eyeOff: 'M3 3l18 18M10.6 5.1A10.8 10.8 0 0112 5c6.4 0 10 7 10 7a17.6 17.6 0 01-3.2 4.2M6.6 6.6A17.4 17.4 0 002 12s3.6 7 10 7a9.7 9.7 0 005.4-1.6M9.9 9.9a3 3 0 004.2 4.2',
+  trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
+  xCircle: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 9l6 6M15 9l-6 6',
+  userX: 'M15 20v-1.5A3.5 3.5 0 0011.5 15h-5A3.5 3.5 0 003 18.5V20M9 11.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM17 8l4 4M21 8l-4 4',
+  undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11',
+  move: 'M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v4M5 5a1 1 0 00-1 1v13a1 1 0 001 1h6M15 19h6M18 16l3 3-3 3',
+  qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM16 16h2v2h-2z',
+  chevronLeft: 'M15 6l-6 6 6 6',
+  chevronRight: 'M9 6l6 6-6 6',
 };
+
+/** A square button with just an icon; `label` is its tooltip and screen-reader name. */
+export function IconButton({ icon, label, tone = 'neutral', className, ...rest }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      className={cx(
+        'inline-flex size-9 cursor-pointer items-center justify-center rounded-btn text-muted transition hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-55',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+        tone === 'danger' ? 'hover:text-danger' : 'hover:text-ink',
+        className,
+      )}
+      {...rest}
+    >
+      <Icon d={icon} className="size-[18px]" />
+    </button>
+  );
+}
+
+// Modal questions instead of the browser's confirm() / prompt(). AskProvider (main.jsx) shows them.
+//   const confirm = useConfirm();  if (await confirm({ title, body, action, tone })) …
+//   const prompt = usePrompt();    const v = await prompt({ title, label, value, placeholder, type, action });  (null = cancelled)
+const AskContext = createContext(null);
+const noAsk = { confirm: async () => true, prompt: async () => null };
+export const useConfirm = () => (useContext(AskContext) ?? noAsk).confirm;
+export const usePrompt = () => (useContext(AskContext) ?? noAsk).prompt;
+
+export function AskProvider({ children }) {
+  const [ask, setAsk] = useState(null); // { kind, ...question, resolve }
+  const api = useMemo(
+    () => ({
+      confirm: (q) => new Promise((resolve) => setAsk({ kind: 'confirm', ...q, resolve })),
+      prompt: (q) => new Promise((resolve) => setAsk({ kind: 'prompt', ...q, resolve })),
+    }),
+    [],
+  );
+  const answer = (v) => {
+    ask.resolve(v);
+    setAsk(null);
+  };
+  return (
+    <AskContext.Provider value={api}>
+      {children}
+      {ask?.kind === 'confirm' && <ConfirmDialog ask={ask} onAnswer={answer} />}
+      {ask?.kind === 'prompt' && <PromptDialog ask={ask} onAnswer={answer} />}
+    </AskContext.Provider>
+  );
+}
+
+function ConfirmDialog({ ask, onAnswer }) {
+  return (
+    <Dialog
+      open
+      onClose={() => onAnswer(false)}
+      title={ask.title}
+      footer={
+        <>
+          {/* Cancel has the focus, so Enter never confirms by accident. */}
+          <Button variant="secondary" autoFocus onClick={() => onAnswer(false)}>
+            {ask.cancel ?? 'Cancel'}
+          </Button>
+          <Button variant={ask.tone === 'neutral' ? 'primary' : 'danger'} onClick={() => onAnswer(true)}>
+            {ask.action ?? 'Delete'}
+          </Button>
+        </>
+      }
+    >
+      {ask.body && <p className="text-sm text-muted">{ask.body}</p>}
+    </Dialog>
+  );
+}
+
+function PromptDialog({ ask, onAnswer }) {
+  const [value, setValue] = useState(ask.value ?? '');
+  const submit = (e) => {
+    e.preventDefault();
+    onAnswer(value.trim());
+  };
+  return (
+    <Dialog
+      open
+      onClose={() => onAnswer(null)}
+      title={ask.title}
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => onAnswer(null)}>
+            Cancel
+          </Button>
+          <Button type="submit" form="ask-prompt" disabled={ask.required !== false && !value.trim()}>
+            {ask.action ?? 'OK'}
+          </Button>
+        </>
+      }
+    >
+      <form id="ask-prompt" onSubmit={submit} noValidate>
+        <Field label={ask.label ?? ask.title} hint={ask.hint}>
+          {(a) => <Input {...a} type={ask.type ?? 'text'} autoFocus value={value} placeholder={ask.placeholder} onChange={(e) => setValue(e.target.value)} />}
+        </Field>
+      </form>
+    </Dialog>
+  );
+}

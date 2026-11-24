@@ -38,6 +38,7 @@ import {
   whatsappText,
 } from '../client-emails';
 import { hasFeature, loadEntitlements } from '../entitlements';
+import { checkInQrPng, checkInUrl, formatCheckInCode } from './check-in';
 import { ManageTokens } from './manage-token';
 import { allowedReminders, parseReminders } from './reminders';
 import { dateFromDb, formatInZone, formatLocalDate } from './time';
@@ -357,6 +358,11 @@ export class BookingNotifications implements OnModuleInit, OnModuleDestroy {
         timeLabel: b.dateOnly ? null : f.time,
         zone: f.zone,
         location: { type: b.service.locationType, address: b.service.address, meetingUrl: b.service.meetingUrl },
+        // Attendance: only in-person appointments are checked in at a front desk.
+        checkIn:
+          b.service.locationType === 'in_person' && b.status === 'confirmed'
+            ? { code: formatCheckInCode(b.checkInCode), qrPng: await checkInQrPng(checkInUrl(this.cfg.clients.bookingsUrl, b.checkInCode)) }
+            : null,
         instructions,
         manageUrl,
         canChange,

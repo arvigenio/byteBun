@@ -84,6 +84,13 @@ export const settingsSchema = yup.object({
 
 export const noShowSchema = yup.object({ noShow: yup.boolean().default(true) });
 
+/** Check-in: the code (typed, or the QR code's link) or a booking id; `force` checks in another day's or a past booking. */
+export const checkInSchema = yup.object({
+  code: yup.string().trim().max(300).nullable(),
+  id: yup.number().integer().positive().nullable(),
+  force: yup.boolean().default(false),
+});
+
 const range = () =>
   yup.object({ weekday: yup.number().integer().min(0).max(6).required(), startMinute: minute('Start'), endMinute: minute('End') }).test('order', 'The end must be after the start.', (v) => !v || v.endMinute > v.startMinute);
 
@@ -102,6 +109,23 @@ export const blockedDateSchema = yup.object({
     .string()
     .test('date', 'Please choose a date.', (v) => !v || isDate(v))
     .nullable(),
+  /** A time window on each date (minutes after midnight, both or neither); none = the whole day. */
+  startMinute: yup.number().integer().min(0).max(1439).nullable().default(null),
+  endMinute: yup
+    .number()
+    .integer()
+    .min(1)
+    .max(1440)
+    .nullable()
+    .default(null)
+    .test('pair', 'Please choose both times.', function (v) {
+      return (v == null) === (this.parent.startMinute == null);
+    })
+    .test('order', 'The end time must be after the start time.', function (v) {
+      return v == null || this.parent.startMinute == null || v > this.parent.startMinute;
+    }),
+  /** One service only; none = the whole business. */
+  serviceId: yup.number().integer().positive().nullable().default(null),
   reason: optionalText(200),
   /** What to do with confirmed bookings on those dates: ask (default, 409 with the list), keep, cancel (customers are told). */
   existing: yup.string().oneOf(['ask', 'keep', 'cancel']).default('ask'),

@@ -11,7 +11,7 @@ model Plan {
   apps      String[]
   // Feature flags, e.g. {bookings.unlimited, bookings.whatsapp}.
   features  String[]
-  // Numeric limits, e.g. {"bookings.monthly": 60, "bookings.services": 3}. Missing = unlimited.
+  // Numeric limits, e.g. {"bookings.monthly": 100, "bookings.services": 5}. Missing = unlimited.
   limits    Json           @default("{}")
   // Packaged plans land on the client portal even with a single app.
   portal    Boolean        @default(false)
@@ -71,7 +71,7 @@ model SubscriptionAddon {
 // rebuilt on every plan change). One row per key:
 //   app:bookings                    value null
 //   feature:bookings.whatsapp       value null
-//   limit:bookings.monthly          value 60
+//   limit:bookings.monthly          value 100
 model Entitlement {
   organizationId String   @map("organization_id")
   key            String   @db.VarChar(80)

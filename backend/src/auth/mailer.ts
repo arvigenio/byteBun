@@ -17,8 +17,10 @@ import { escapeHtml } from './email-template';
 
 export interface MailAttachment {
   filename: string;
-  content: string;
+  content: string | Buffer;
   contentType: string;
+  /** Set for an inline image the HTML shows with <img src="cid:…"> (e.g. a booking's QR code). */
+  cid?: string;
 }
 
 export interface Mail {
@@ -118,7 +120,7 @@ export class Mailer {
       subject: mail.subject,
       text: mail.text,
       html: mail.html,
-      attachments: mail.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
+      attachments: mail.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType, ...(a.cid ? { cid: a.cid, contentDisposition: 'inline' as const } : {}) })),
     });
   }
 

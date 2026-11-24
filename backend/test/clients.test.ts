@@ -1,12 +1,13 @@
 // Client apps: sign-in (accounts), new business, entitlement + role checks, Bookings settings,
 // the public booking page, double-booking protection, limits, emails, and the manage link.
+import { newCheckInCode } from '../src/clients/booking/check-in';
 import './env';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import request from 'supertest';
 import { BookingNotifications } from '../src/clients/booking/notifications';
 import { RetentionJob } from '../src/clients/booking/retention';
-import { addDays, dateToDb, fromLocal, todayIn } from '../src/clients/booking/time';
+import { addDays, dateToDb, fromLocal, todayIn, toLocal } from '../src/clients/booking/time';
 import { syncEntitlements } from '../src/clients/entitlements';
 import { createClientsDb } from '../src/clients/clients-db';
 import { outbox } from '../src/auth/mailer';
@@ -105,7 +106,8 @@ describe('accounts', () => {
     assert.equal(me.body.business.role, 'owner');
     assert.equal(me.body.business.plan.code, 'free');
     assert.equal(me.body.business.landing, 'bookings');
-    assert.equal(me.body.business.limits['bookings.monthly'], 60);
+    assert.equal(me.body.business.limits['bookings.monthly'], 100);
+    assert.equal(me.body.business.limits['bookings.services'], 5);
     assert.equal(me.body.business.publicUrl, 'http://bookings.localhost:5173/nina-dental');
     assert.equal(me.body.user.name, 'Nina Reyes');
   });
@@ -180,14 +182,14 @@ describe('bookings', () => {
   it('shows only public details on the booking page', async () => {
     const { b } = await newBusiness();
     await addService(b, { name: 'Video consult', locationType: 'online', meetingUrl: 'https://meet.example.com/secret-room', instructions: '<p>Gate code 4321</p>' });
-    await b.put('/api/client/bookings/settings', { privateInstructions: '<p>Park at the back</p>', pageInstructions: 'Please arrive 5 minutes early.' });
+    await b.put('/api/client/bookings/settings', { privateInstructions: '<p>Park at the back</p>', pageInstructions: '<p>Please <strong>arrive 5 minutes early</strong>.</p><script>alert(1)</script><img src=x onerror=alert(1)>' });
     const page = await request(t.server).get('/api/public/bookings/smile-clinic').set('Host', BOOKINGS);
     assert.equal(page.status, 200);
     const text = JSON.stringify(page.body);
     assert.ok(!text.includes('secret-room'));
     assert.ok(!text.includes('4321'));
     assert.ok(!text.includes('Park at the back'));
-    assert.ok(text.includes('arrive 5 minutes early'));
+    assert.equal(page.body.business.instructions, '<p>Please <strong>arrive 5 minutes early</strong>.</p>');
     assert.equal(page.body.branding.poweredBy, true);
   });
 
@@ -278,6 +280,45 @@ describe('bookings', () => {
     assert.ok(!(await openSlots('smile-clinic', serviceId)).some((d) => d.date === day.date));
   });
 
+  it('blocks a time window on a date: only those slots go, and only overlapping bookings conflict', async () => {
+    const { b } = await newBusiness();
+    const serviceId = await addService(b);
+    const [day] = await openSlots('smile-clinic', serviceId);
+    const minuteOf = (iso: string) => toLocal(new Date(iso), 'America/Toronto').minute;
+    const [first, second, , fourth] = day.slots.map((s) => s.startsAt);
+    assert.equal((await book('smile-clinic', { serviceId, startsAt: fourth })).status, 201);
+    // Block the first two slots (30 min each): the booking at the fourth slot doesn't overlap.
+    const window = { startMinute: minuteOf(first), endMinute: minuteOf(second) + 30 };
+    const done = await b.post('/api/client/bookings/blocked-dates', { startDate: day.date, ...window, reason: 'Staff meeting' });
+    assert.equal(done.status, 201, JSON.stringify(done.body));
+    assert.equal(done.body.startMinute, window.startMinute);
+    const [after] = (await openSlots('smile-clinic', serviceId)).filter((d) => d.date === day.date);
+    const left = after.slots.map((s) => s.startsAt);
+    assert.ok(!left.includes(first) && !left.includes(second), 'blocked slots gone');
+    assert.ok(left.length >= 1, 'the rest of the day stays open');
+    assert.equal((await book('smile-clinic', { serviceId, startsAt: first })).body.error, 'unavailable');
+    // A window over the booked slot asks first.
+    const ask = await b.post('/api/client/bookings/blocked-dates', { startDate: day.date, startMinute: minuteOf(fourth), endMinute: minuteOf(fourth) + 30 });
+    assert.equal(ask.status, 409);
+    assert.equal(ask.body.conflicts.length, 1);
+    const bad = await b.post('/api/client/bookings/blocked-dates', { startDate: day.date, startMinute: 600 });
+    assert.equal(bad.status, 400);
+  });
+
+  it('blocks time off for one service only', async () => {
+    const { b } = await newBusiness();
+    const cleaning = await addService(b, { name: 'Cleaning' });
+    const whitening = await addService(b, { name: 'Whitening' });
+    const [day] = await openSlots('smile-clinic', cleaning);
+    const done = await b.post('/api/client/bookings/blocked-dates', { startDate: day.date, serviceId: whitening, reason: 'Dentist away' });
+    assert.equal(done.status, 201, JSON.stringify(done.body));
+    assert.equal(done.body.service.name, 'Whitening');
+    assert.ok(!(await openSlots('smile-clinic', whitening)).some((d) => d.date === day.date), 'whitening is off that day');
+    assert.ok((await openSlots('smile-clinic', cleaning)).some((d) => d.date === day.date), 'cleaning still open');
+    const list = await b.get('/api/client/bookings/blocked-dates');
+    assert.equal(list.body[0].service.id, whitening);
+  });
+
   it('free plan: stops at the monthly limit (cancelled bookings count) and warns the owner', async () => {
     const { b, orgId } = await newBusiness();
     const serviceId = await addService(b);
@@ -293,16 +334,21 @@ describe('bookings', () => {
     assert.equal(third.body.error, 'monthly_limit');
     const page = await request(t.server).get('/api/public/bookings/smile-clinic').set('Host', BOOKINGS);
     assert.equal(page.body.status, 'month_full');
+    assert.equal(page.body.services.length, 1, 'services still listed');
+    const cal = await request(t.server).get(`/api/public/bookings/smile-clinic/availability?serviceId=${serviceId}`).set('Host', BOOKINGS);
+    assert.equal(cal.body.status, 'month_full');
+    assert.ok(cal.body.days.length > 0, 'the calendar still shows');
+    assert.ok(cal.body.days.every((d: { status: string; slots: unknown[] }) => d.status === 'closed' && d.slots.length === 0), 'every day disabled');
     await notifications.flush();
     assert.ok(mailsFor('owner@clinic.test').some((m) => /limit is reached/.test(m.subject)));
   });
 
   it('limits active services on the free plan', async () => {
     const { b } = await newBusiness();
-    for (const name of ['A', 'B', 'C']) await addService(b, { name });
-    const fourth = await b.post('/api/client/bookings/services', { name: 'D', durationMinutes: 30 });
-    assert.equal(fourth.status, 403);
-    assert.equal(fourth.body.error, 'not_in_plan');
+    for (const name of ['A', 'B', 'C', 'D', 'E']) await addService(b, { name });
+    const sixth = await b.post('/api/client/bookings/services', { name: 'F', durationMinutes: 30 });
+    assert.equal(sixth.status, 403);
+    assert.equal(sixth.body.error, 'not_in_plan');
   });
 });
 
@@ -378,7 +424,7 @@ describe('free plan retention (60 days after the appointment)', () => {
     });
     const startsAt = fromLocal(date, 600, 'America/Toronto');
     return db.booking.create({
-      data: { organizationId: orgId, serviceId, customerId: customer.id, localDate: dateToDb(date), startsAt, endsAt: startsAt, blockedUntil: startsAt, manageNonce: 'x'.repeat(32), note },
+      data: { organizationId: orgId, serviceId, customerId: customer.id, localDate: dateToDb(date), startsAt, endsAt: startsAt, blockedUntil: startsAt, manageNonce: 'x'.repeat(32), checkInCode: newCheckInCode(), note },
     });
   }
 
@@ -461,5 +507,95 @@ describe('account details', () => {
     assert.equal((await staff.patch('/api/client/profile', { firstName: 'Sam' })).status, 200);
     assert.equal((await staff.get('/api/client/profile')).body.business.canEdit, false);
     assert.equal((await staff.patch('/api/client/business', { name: 'Hacked' })).status, 403);
+  });
+});
+
+describe('attendance check-in (QR code / typed code)', () => {
+  /** A booking `dayOffset` days from today, `minutesFromNow` from now (today's), for the check-in tests. */
+  async function bookingAt(orgId: string, serviceId: number, dayOffset: number, minutesFromNow = 0) {
+    const tz = 'America/Toronto';
+    const today = todayIn(tz);
+    const date = addDays(today, dayOffset);
+    const startsAt = dayOffset === 0 ? new Date(Date.now() + minutesFromNow * 60_000) : fromLocal(date, 600, tz);
+    const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
+    const customer = await db.customer.upsert({
+      where: { organizationId_email: { organizationId: orgId, email: `c${dayOffset}${minutesFromNow}@x.test` } },
+      create: { organizationId: orgId, email: `c${dayOffset}${minutesFromNow}@x.test`, name: 'Carla Cruz' },
+      update: {},
+    });
+    return db.booking.create({ data: { organizationId: orgId, serviceId, customerId: customer.id, localDate: dateToDb(date), startsAt, endsAt, blockedUntil: endsAt, manageNonce: 'c'.repeat(32), checkInCode: newCheckInCode() } });
+  }
+  const pretty = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
+
+  it('emails the QR code and the code with an in-person booking', async () => {
+    const { b } = await newBusiness();
+    const serviceId = await addService(b);
+    const [day] = await openSlots('smile-clinic', serviceId);
+    const res = await book('smile-clinic', { serviceId, startsAt: day.slots[0].startsAt });
+    assert.equal(res.status, 201);
+    await notifications.flush();
+    const mail = mailsFor('carl@example.com').find((m) => /Booking confirmed/.test(m.subject));
+    assert.ok(mail, 'confirmation sent');
+    const qr = mail!.attachments?.find((a) => a.cid === 'checkin-qr');
+    assert.ok(qr && Buffer.isBuffer(qr.content) && qr.contentType === 'image/png', 'inline QR image');
+    assert.match(mail!.html ?? '', /cid:checkin-qr/);
+    const [row] = (await b.get('/api/client/bookings/items')).body;
+    assert.match(row.checkInCode, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    assert.ok(mail!.text.includes(row.checkInCode), 'the code is in the email');
+  });
+
+  it('checks in today, warns for another day or a past booking, and checks in only when forced', async () => {
+    const { b, orgId } = await newBusiness();
+    const serviceId = await addService(b);
+    const now = await bookingAt(orgId, serviceId, 0, -5); // started 5 minutes ago, still on
+    const tomorrow = await bookingAt(orgId, serviceId, 1);
+    const yesterday = await bookingAt(orgId, serviceId, -1);
+
+    // Typed with lower case, a dash and spaces; or the QR code's link.
+    const ok = await b.post('/api/client/bookings/check-in', { code: ` ${pretty(now.checkInCode).toLowerCase()} ` });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.state, 'ok');
+    assert.equal(ok.body.checkedIn, true);
+    assert.ok(ok.body.booking.checkedInAt);
+    const again = await b.post('/api/client/bookings/check-in', { code: `https://bookings.example/app/check-in?code=${now.checkInCode}` });
+    assert.equal(again.body.state, 'already');
+    assert.equal(again.body.checkedIn, false);
+
+    const early = await b.post('/api/client/bookings/check-in', { code: tomorrow.checkInCode });
+    assert.equal(early.body.state, 'other_day');
+    assert.equal(early.body.booking.checkedInAt, null);
+    const late = await b.post('/api/client/bookings/check-in', { code: yesterday.checkInCode });
+    assert.equal(late.body.state, 'expired');
+    const forced = await b.post('/api/client/bookings/check-in', { id: yesterday.id, force: true });
+    assert.equal(forced.body.checkedIn, true);
+
+    // The business can move a missed appointment (the customer can't).
+    const [day] = await openSlots('smile-clinic', serviceId);
+    const moved = await b.post(`/api/client/bookings/items/${tomorrow.id}/reschedule`, { startsAt: day.slots[day.slots.length - 1].startsAt });
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    const missed = await bookingAt(orgId, serviceId, -2);
+    const movedMissed = await b.post(`/api/client/bookings/items/${missed.id}/reschedule`, { startsAt: day.slots[0].startsAt });
+    assert.equal(movedMissed.status, 200, JSON.stringify(movedMissed.body));
+
+    const undo = await b.post(`/api/client/bookings/items/${now.id}/check-in/undo`, {});
+    assert.equal(undo.status, 200);
+    assert.equal((await b.post('/api/client/bookings/check-in', { code: now.checkInCode })).body.state, 'ok');
+
+    assert.equal((await b.post('/api/client/bookings/check-in', { code: 'ZZZZ-ZZZZ' })).status, 404);
+    assert.equal((await b.post('/api/client/bookings/check-in', { code: 'nope' })).status, 400);
+  });
+
+  it('lists unattended appointments: over and never checked in', async () => {
+    const { b, orgId } = await newBusiness();
+    const serviceId = await addService(b);
+    const missed = await bookingAt(orgId, serviceId, -3);
+    const came = await bookingAt(orgId, serviceId, -2);
+    await bookingAt(orgId, serviceId, 2); // upcoming: not unattended
+    await b.post('/api/client/bookings/check-in', { id: came.id, force: true });
+    const list = await b.get('/api/client/bookings/items?view=unattended');
+    assert.deepEqual(
+      list.body.map((r: { id: number }) => r.id),
+      [missed.id],
+    );
   });
 });

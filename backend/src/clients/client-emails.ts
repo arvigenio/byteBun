@@ -31,6 +31,19 @@ export const cleanInstructions = (html: string | null | undefined) => {
   const out = sanitizeHtml(html ?? '', INSTRUCTIONS_HTML).trim();
   return out.replace(/<p>\s*<\/p>/g, '').trim() || null;
 };
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/** Instructions that may still be plain text (saved before the editor): paragraphs from blank lines, then cleaned. */
+export const richInstructions = (value: string | null | undefined) => {
+  if (!value?.trim()) return null;
+  const html = /<[a-z][^>]*>/i.test(value)
+    ? value
+    : value
+        .trim()
+        .split(/\n\s*\n/)
+        .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, '<br>')}</p>`)
+        .join('');
+  return cleanInstructions(html);
+};
 export const instructionsToText = (html: string) =>
   sanitizeHtml(html.replace(/<a [^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)').replace(/<\/(p|li|h3|h4)>|<br\s*\/?>/gi, '\n'), { allowedTags: [] })
     .replace(/&amp;/g, '&')
@@ -60,6 +73,8 @@ interface Content {
   details?: [string, string][];
   /** Trusted HTML blocks (already sanitized) with their plain-text copy. */
   blocks?: { title: string; html: string; text: string }[];
+  /** The check-in QR code (an inline image, cid:checkin-qr) and its code. */
+  checkIn?: { code: string };
   buttons?: Button[];
   note?: string;
   footer: string;
@@ -91,6 +106,17 @@ ${
         .join('')}</table>`
     : ''
 }
+${
+  c.checkIn
+    ? `<div style="margin:6px 0 22px;padding:20px 16px;border:2px dashed ${c.color};border-radius:12px;text-align:center;">
+<div style="font:700 13px/18px ${FONT};color:#374151;margin:0 0 4px;text-transform:uppercase;letter-spacing:.5px;">Your check-in code</div>
+<div style="font:13px/20px ${FONT};color:#6B7280;margin:0 0 12px;">Show this QR code at the front desk when you arrive.</div>
+<img src="cid:checkin-qr" width="160" height="160" alt="Check-in QR code" style="display:block;margin:0 auto 12px;width:160px;height:160px;border:0;">
+<div style="font:700 26px/32px Consolas,Menlo,monospace;letter-spacing:6px;color:#111827;">${e(c.checkIn.code)}</div>
+<div style="font:12px/18px ${FONT};color:#6B7280;margin:6px 0 0;">If the scan doesn't work, give them this code.</div>
+</div>`
+    : ''
+}
 ${(c.blocks ?? [])
   .map(
     (b) =>
@@ -110,6 +136,7 @@ ${c.note ? `<p style="margin:8px 0 0;font:13px/20px ${FONT};color:#6B7280;">${e(
     ...(c.code ? [c.code, ''] : []),
     ...(c.details ?? []).map(([k, v]) => `${k}: ${v}`),
     ...(c.details?.length ? [''] : []),
+    ...(c.checkIn ? ['YOUR CHECK-IN CODE', `${c.checkIn.code} (show the QR code in this email, or give this code, at the front desk)`, ''] : []),
     ...(c.blocks ?? []).flatMap((b) => [b.title.toUpperCase(), b.text, '']),
     ...(c.buttons ?? []).map((b) => `${b.label}: ${b.href}`),
     ...(c.note ? ['', c.note] : []),
@@ -178,6 +205,8 @@ export interface BookingView {
   canChange: boolean;
   calendar: { google: string; outlook: string; ics: string };
   note: string | null;
+  /** In-person services: the attendance code ("ABCD-EFGH") and its QR code (PNG). */
+  checkIn: { code: string; qrPng: Buffer } | null;
 }
 
 const whenOf = (v: BookingView) => (v.timeLabel ? `${v.dateLabel}, ${v.timeLabel} (${v.zone})` : `${v.dateLabel} (any time during opening hours)`);
@@ -212,8 +241,13 @@ const blocks = (v: BookingView) => v.instructions.map((i) => ({ title: i.title, 
 
 const ics = (v: BookingView): MailAttachment => ({ filename: 'appointment.ics', content: v.calendar.ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' });
 
+/** The QR code and code, for the emails a customer brings to the appointment (confirmation, moved, reminder). */
+const withCheckIn = (v: BookingView) => (v.checkIn ? { checkIn: { code: v.checkIn.code } } : {});
+const qrAttachment = (v: BookingView): MailAttachment[] => (v.checkIn ? [{ filename: 'check-in.png', content: v.checkIn.qrPng, contentType: 'image/png', cid: 'checkin-qr' }] : []);
+
 function customerMail(cfg: AppConfig, v: BookingView, subject: string, c: Omit<Content, 'brandName' | 'color' | 'footer'>, withIcs: boolean): Mail {
   const { html, text } = render({ ...c, brandName: v.brand.businessName, color: v.brand.primaryColor, footer: brandFooter(v.brand) });
+  const attachments = [...(withIcs ? [ics(v)] : []), ...(c.checkIn ? qrAttachment(v) : [])];
   return {
     to: v.customerEmail,
     names: { [v.customerEmail]: v.customerName },
@@ -222,7 +256,7 @@ function customerMail(cfg: AppConfig, v: BookingView, subject: string, c: Omit<C
     html,
     from: fromFor(cfg, v.brand.businessName),
     replyTo: v.brand.replyTo ?? undefined,
-    attachments: withIcs ? [ics(v)] : undefined,
+    attachments: attachments.length ? attachments : undefined,
   };
 }
 
@@ -239,6 +273,7 @@ export function confirmationMail(cfg: AppConfig, v: BookingView): Mail {
       title: "You're booked!",
       intro: [`Hi ${v.customerName}, your booking with ${v.brand.businessName} is confirmed.`],
       details: [['Service', v.serviceName], ['When', whenOf(v)], ...locationDetails(v)],
+      ...withCheckIn(v),
       blocks: blocks(v),
       buttons: [...locationButtons(v), ...calendarButtons(v), ...changeButtons(v)],
       note: callNote(v),
@@ -257,6 +292,7 @@ export function rescheduledMail(cfg: AppConfig, v: BookingView, previous: string
       title: 'Your booking was moved',
       intro: [`Hi ${v.customerName}, your booking with ${v.brand.businessName} has a new time.`],
       details: [['Service', v.serviceName], ['New time', whenOf(v)], ['Was', previous], ...locationDetails(v)],
+      ...withCheckIn(v),
       blocks: blocks(v),
       buttons: [...locationButtons(v), ...calendarButtons(v), ...changeButtons(v)],
       note: callNote(v),
@@ -275,6 +311,7 @@ export function reminderMail(cfg: AppConfig, v: BookingView): Mail {
       title: 'See you soon',
       intro: [`Hi ${v.customerName}, this is a reminder of your booking with ${v.brand.businessName}.`],
       details: [['Service', v.serviceName], ['When', whenOf(v)], ...locationDetails(v)],
+      ...withCheckIn(v),
       blocks: blocks(v),
       buttons: [...locationButtons(v), ...changeButtons(v)],
       note: callNote(v),
@@ -336,6 +373,7 @@ export function whatsappText(kind: string, v: BookingView): string {
     ...base,
     ...(customer && v.location.type === 'online' && v.location.meetingUrl ? [`Join: ${v.location.meetingUrl}`] : []),
     ...(customer && v.location.type === 'in_person' && v.location.address ? [v.location.address] : []),
+    ...(customer && v.checkIn && ['confirmation', 'reschedule', 'reminder'].includes(kind) ? [`Check-in code: ${v.checkIn.code}`] : []),
     ...(customer && v.canChange && kind !== 'cancellation' ? [`Reschedule or cancel: ${v.manageUrl}`] : []),
   ].join('\n');
 }

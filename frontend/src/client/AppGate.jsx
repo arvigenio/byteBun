@@ -7,7 +7,7 @@ import { Button, Icon, ICONS, Loading, NavLink } from './ui.jsx';
 // Signed-in pages: makes sure there is a session and a business, sends packaged clients to the
 // portal, then renders the shell (standalone Bookings or the client portal) around the page.
 // The API checks everything again; this only picks the right screen.
-export function AppGate({ shell, app, page }) {
+export function AppGate({ shell, app, page, bare = false }) {
   const { data: cfg } = useConfigQuery();
   const me = useMeQuery();
   const status = me.error?.status;
@@ -18,7 +18,7 @@ export function AppGate({ shell, app, page }) {
     if (status === 401) go(signInUrl(cfg));
     else if (me.data && !business) go(welcomeUrl(cfg));
     // Packaged clients use Bookings inside the portal.
-    else if (business && shell === 'bookings' && business.landing === 'portal') go(`${cfg.portalUrl}/bookings${window.location.pathname.slice(bookingsBase.length)}`);
+    else if (business && shell === 'bookings' && business.landing === 'portal') go(`${cfg.portalUrl}/bookings${window.location.pathname.slice(bookingsBase.length)}${window.location.search}`);
   }, [cfg, status, me.data, business, shell]);
 
   if (me.isLoading || !cfg || status === 401 || (me.data && !business)) return <Loading />;
@@ -29,6 +29,8 @@ export function AppGate({ shell, app, page }) {
   if (app && !business.apps.some((a) => a.key === app && a.enabled)) {
     return <Centered title="Not in your plan">Your plan does not include this app. Contact Byte Bun to add it.</Centered>;
   }
+  // A full-screen page (the check-in scanner): no header or menu.
+  if (bare) return page;
   return (
     <Shell shell={shell} me={me.data} cfg={cfg}>
       {page}
@@ -58,6 +60,7 @@ async function signOut() {
 
 const BOOKINGS_NAV = [
   { href: '', label: 'Bookings', icon: ICONS.calendar },
+  { href: '/check-in', label: 'Check-in', icon: ICONS.qr },
   { href: '/services', label: 'Services', icon: ICONS.tag },
   { href: '/schedule', label: 'Schedule', icon: ICONS.clock },
   { href: '/page', label: 'Booking page', icon: ICONS.palette },
@@ -70,9 +73,12 @@ function Mark() {
   return <img src={surface === 'portal' ? '/client/portal-icon.svg' : '/client/bookings-icon.svg'} alt="" className="size-8 rounded-lg" />;
 }
 
-/** The app switcher: every app, the ones in the plan open; in the portal, Home too. */
+/** The app switcher. In the portal: every app, the ones in the plan open, and Home. In Bookings: only the apps in the plan. */
 function AppSwitcher({ business, cfg }) {
   const [open, setOpen] = useState(false);
+  const apps = surface === 'portal' ? business.apps : business.apps.filter((a) => a.enabled);
+  // Nothing to switch to (just Bookings itself, no portal): no switcher.
+  if (business.landing !== 'portal' && apps.every((a) => a.key === 'bookings')) return null;
   const appUrl = (key) => (key === 'bookings' ? (surface === 'portal' || business.landing === 'portal' ? `${cfg.portalUrl}/bookings` : `${cfg.bookingsUrl}/app`) : null);
   return (
     <div className="relative">
@@ -86,7 +92,7 @@ function AppSwitcher({ business, cfg }) {
               <img src="/client/portal-icon.svg" alt="" className="size-7 rounded-md" /> Client portal home
             </a>
           )}
-          {business.apps.map((a) => {
+          {apps.map((a) => {
             const href = a.enabled && a.live ? appUrl(a.key) : null;
             return href ? (
               <a key={a.key} href={href} className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-sunken">

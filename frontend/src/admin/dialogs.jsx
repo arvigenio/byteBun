@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { ConfigProvider, Modal } from 'antd';
-import { AdminButton } from './ui.jsx';
+import { AdminButton, Field, TextInput } from './ui.jsx';
 
 // The admin app's dialogs: Ant Design's Modal, dressed in the site's brand tokens (index.css) so
 // nothing shows Ant Design's default blue. Buttons inside are the admin's own (ui.jsx: AdminButton).
@@ -8,6 +8,8 @@ import { AdminButton } from './ui.jsx';
 //   <Dialog eyebrow title onClose footer>…</Dialog>   a dialog (shown while it is rendered)
 //   const confirm = useConfirm();                      "are you sure?" before deleting something
 //   if (await confirm({ title, body, action })) …
+//   const prompt = usePrompt();                        a name or other one-line answer (no window.prompt)
+//   const name = await prompt({ title, label, value, action, validate })   // null = cancelled
 //
 // AdminDialogs (around the whole admin app, AdminApp.jsx) supplies the theme and shows the confirm.
 
@@ -73,21 +75,31 @@ const ConfirmContext = createContext(null);
  * Asks before something is deleted. `confirm({ title, body, action })` resolves to true when the
  * admin presses the `action` button, false on Cancel, Esc, the ✕ or a click outside.
  */
-export const useConfirm = () => useContext(ConfirmContext);
+export const useConfirm = () => useContext(ConfirmContext).confirm;
+
+/**
+ * Asks for one line of text. `prompt({ title, label, hint, value, placeholder, action, validate })`
+ * resolves to the trimmed text, or null on Cancel, Esc, the ✕ or a click outside. `validate(text)`
+ * may return (or resolve to) an error message, shown under the field, to keep the dialog open.
+ */
+export const usePrompt = () => useContext(ConfirmContext).prompt;
 
 export function AdminDialogs({ children }) {
   const theme = useMemo(brandTheme, []);
-  const [ask, setAsk] = useState(null); // { title, body, action, resolve }
-  const confirm = useCallback((question) => new Promise((resolve) => setAsk({ ...question, resolve })), []);
-  const answer = (yes) => {
-    ask.resolve(yes);
+  const [ask, setAsk] = useState(null); // { kind, title, body, action, resolve }
+  const confirm = useCallback((question) => new Promise((resolve) => setAsk({ kind: 'confirm', ...question, resolve })), []);
+  const prompt = useCallback((question) => new Promise((resolve) => setAsk({ kind: 'prompt', ...question, resolve })), []);
+  const api = useMemo(() => ({ confirm, prompt }), [confirm, prompt]);
+  const answer = (value) => {
+    ask.resolve(value);
     setAsk(null);
   };
 
   return (
     <ConfigProvider theme={theme}>
-      <ConfirmContext.Provider value={confirm}>{children}</ConfirmContext.Provider>
-      {ask && (
+      <ConfirmContext.Provider value={api}>{children}</ConfirmContext.Provider>
+      {ask?.kind === 'prompt' && <PromptDialog ask={ask} onAnswer={answer} />}
+      {ask?.kind === 'confirm' && (
         <Dialog
           eyebrow="Please confirm"
           title={ask.title}
@@ -109,5 +121,56 @@ export function AdminDialogs({ children }) {
         </Dialog>
       )}
     </ConfigProvider>
+  );
+}
+
+function PromptDialog({ ask, onAnswer }) {
+  const [value, setValue] = useState(ask.value ?? '');
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    const text = value.trim();
+    if (!text) return setError('Please enter a value.');
+    setBusy(true);
+    const problem = ask.validate ? await ask.validate(text) : null;
+    setBusy(false);
+    if (problem) return setError(problem);
+    onAnswer(text);
+  };
+  return (
+    <Dialog
+      eyebrow={ask.eyebrow ?? 'Please enter'}
+      title={ask.title}
+      onClose={() => onAnswer(null)}
+      footer={
+        <div className="ml-auto flex flex-wrap gap-3">
+          <AdminButton variant="outline" onClick={() => onAnswer(null)}>
+            Cancel
+          </AdminButton>
+          <AdminButton type="submit" form="admin-prompt" busy={busy}>
+            {ask.action ?? 'Save'}
+          </AdminButton>
+        </div>
+      }
+    >
+      <form id="admin-prompt" onSubmit={submit} noValidate className="px-6 pt-5 pb-1 mobile:px-5">
+        <Field label={ask.label ?? ask.title} hint={ask.hint} error={error} id="admin-prompt-input">
+          <TextInput
+            id="admin-prompt-input"
+            autoFocus
+            error={error}
+            aria-describedby={error ? 'admin-prompt-input-error' : undefined}
+            value={value}
+            placeholder={ask.placeholder}
+            maxLength={ask.maxLength}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setError(null);
+            }}
+          />
+        </Field>
+      </form>
+    </Dialog>
   );
 }

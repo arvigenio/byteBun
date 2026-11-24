@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useCancelInviteMutation, useInviteMutation, useMeQuery, useRemoveMemberMutation, useSetRoleMutation, useTeamQuery } from '../api.js';
 import { inviteSchema } from '../lib/schemas.js';
-import { Badge, Button, Card, Field, Input, Loading, PageHeader, Select } from '../ui.jsx';
+import { Badge, Button, Card, Field, Input, Loading, PageHeader, Select, useConfirm } from '../ui.jsx';
 import { can } from './BookingsApp.jsx';
 
 const ROLE_HINT = { owner: 'Everything, including the plan', admin: 'Settings, services, page and team', staff: 'Sees and manages bookings' };
@@ -13,6 +13,7 @@ export function TeamPage() {
   const q = useTeamQuery();
   const [setRole] = useSetRoleMutation();
   const [remove] = useRemoveMemberMutation();
+  const confirm = useConfirm();
   const [cancelInvite] = useCancelInviteMutation();
   const manage = can(me, 'team.manage');
   const isOwner = me.business.role === 'owner';
@@ -54,7 +55,12 @@ export function TeamPage() {
                     </Select>
                   )}
                   {!locked && !self && (
-                    <Button size="sm" variant="ghost" onClick={() => window.confirm(`Remove ${m.email} from the team?`) && act(remove(m.id), 'Removed')}>
+                    <Button size="sm" variant="ghost" 
+                      onClick={async () => {
+                        const sure = await confirm({ title: 'Remove from the team?', body: `${m.name || m.email} will lose access to this business. You can invite them again later.`, action: 'Remove' });
+                        if (sure) act(remove(m.id), 'Removed');
+                      }}
+                    >
                       Remove
                     </Button>
                   )}

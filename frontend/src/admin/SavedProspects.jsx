@@ -17,7 +17,7 @@ import {
   savedProspectSelected,
   updateSavedProspect,
 } from '../store/adminSavedProspectsSlice.js';
-import { useConfirm } from './dialogs.jsx';
+import { useConfirm, usePrompt } from './dialogs.jsx';
 import { Chance, EmailCell, ExternalLink, SocialCell, WebsiteCell } from './prospectCells.jsx';
 import { AdminButton, Field, Notice, Panel, SelectInput, Spinner, TextInput } from './ui.jsx';
 
@@ -38,17 +38,23 @@ export function useLoadProspectGroups() {
   }, [dispatch]);
 }
 
+/** A group name's problem (prospectGroupSchema), or null when it is fine. */
+const groupNameProblem = (name) =>
+  prospectGroupSchema.validate({ name }).then(
+    () => null,
+    (err) => err.message,
+  );
+
 /**
  * A select value -> a group id: 'none' -> null, 'new' -> asks for a name and creates the group
  * (undefined if cancelled or it failed).
  */
-async function resolveGroup(dispatch, value) {
+async function resolveGroup(dispatch, prompt, value) {
   if (value === 'none') return null;
   if (value !== 'new') return Number(value);
-  const name = window.prompt('Name for the new group (e.g. "Makati dentists"):')?.trim();
+  const name = await prompt({ eyebrow: 'Saved prospects', title: 'New group', label: 'Group name', placeholder: 'e.g. Makati dentists', action: 'Create group', validate: groupNameProblem });
   if (!name) return undefined;
   try {
-    await prospectGroupSchema.validate({ name });
     return (await dispatch(createProspectGroup(name)).unwrap()).id;
   } catch (err) {
     toast.error(errorMessage(err, 'The group was not created.'));
@@ -84,6 +90,7 @@ const groupValue = (groupId) => (groupId == null ? 'none' : String(groupId));
 /** One search result: "Save to…", or its group (change it, or remove it from saved). */
 export function SaveCell({ p, searchId }) {
   const dispatch = useDispatch();
+  const prompt = usePrompt();
   const groups = useGroups();
   const onChange = async (e) => {
     const value = e.target.value;
@@ -93,7 +100,7 @@ export function SaveCell({ p, searchId }) {
         toast.success(`Removed ${p.name} from saved.`);
         return;
       }
-      const groupId = await resolveGroup(dispatch, value);
+      const groupId = await resolveGroup(dispatch, prompt, value);
       if (groupId === undefined) return;
       if (p.saved) await dispatch(updateSavedProspect({ id: p.saved.id, groupId })).unwrap();
       else await dispatch(saveProspects({ searchId, itemIds: [p.id], groupId })).unwrap();
@@ -115,11 +122,12 @@ export function SaveCell({ p, searchId }) {
 /** "Save all shown…": every result on screen (after filters) into one group. */
 export function BulkSave({ searchId, items }) {
   const dispatch = useDispatch();
+  const prompt = usePrompt();
   const groups = useGroups();
   const onChange = async (e) => {
     const value = e.target.value;
     e.target.value = '';
-    const groupId = await resolveGroup(dispatch, value);
+    const groupId = await resolveGroup(dispatch, prompt, value);
     if (groupId === undefined) return;
     const itemIds = items.slice(0, MAX_BULK).map((p) => p.id);
     try {
@@ -268,12 +276,12 @@ function SavedDetails({ p }) {
 
 function GroupActions({ group }) {
   const dispatch = useDispatch();
+  const prompt = usePrompt();
   const confirm = useConfirm();
   const rename = async () => {
-    const name = window.prompt('New name for the group:', group.name)?.trim();
+    const name = await prompt({ eyebrow: 'Saved prospects', title: 'Rename group', label: 'Group name', value: group.name, action: 'Rename', validate: groupNameProblem });
     if (!name || name === group.name) return;
     try {
-      await prospectGroupSchema.validate({ name });
       await dispatch(renameProspectGroup({ id: group.id, name })).unwrap();
       toast.success('Group renamed.');
     } catch (err) {
@@ -309,6 +317,7 @@ function GroupActions({ group }) {
 
 export function SavedTab() {
   const dispatch = useDispatch();
+  const prompt = usePrompt();
   const groups = useGroups();
   const { group, items, status, error, selectedId, busyId, total } = useSelector((s) => s.adminSavedProspects);
   useEffect(() => {
@@ -324,7 +333,7 @@ export function SavedTab() {
         await dispatch(removeSavedProspect({ id: p.id })).unwrap();
         toast.success(`Removed ${p.name} from saved.`);
       } else {
-        const groupId = await resolveGroup(dispatch, value);
+        const groupId = await resolveGroup(dispatch, prompt, value);
         if (groupId === undefined) return;
         await dispatch(updateSavedProspect({ id: p.id, groupId })).unwrap();
       }

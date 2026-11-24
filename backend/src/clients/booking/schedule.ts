@@ -8,7 +8,8 @@
 //  - a slot holds `bookersPerSlot` people; each booking occupies its duration + buffer, and a
 //    candidate is full when that many bookings overlap its own duration + buffer
 // Date-only mode: customers pick a day; first come, first served; spots = max per day.
-// Both: max bookings per day (or no limit), blocked dates, minimum notice, booking window.
+// Both: max bookings per day (or no limit), time off (whole days, or time windows in slots mode;
+// for the business or one service), minimum notice, booking window.
 import { addDays, fromLocal, toLocal, todayIn, weekdayOf } from './time';
 
 export interface DayHours {
@@ -27,11 +28,21 @@ export interface ScheduleRules {
   /** By weekday (0 = Sunday). Missing = closed. */
   hours: Map<number, DayHours>;
   breaks: { weekday: number; startMinute: number; endMinute: number }[];
-  /** Inclusive local date ranges. */
-  blocked: { startDate: string; endDate: string }[];
+  /** Time off: inclusive local date ranges; a time window on each date (else the whole day); one service (else all). */
+  blocked: TimeOff[];
+}
+
+export interface TimeOff {
+  startDate: string;
+  endDate: string;
+  startMinute?: number | null;
+  endMinute?: number | null;
+  serviceId?: number | null;
 }
 
 export interface ServiceTiming {
+  /** For time off that applies to one service. */
+  id?: number;
   durationMinutes: number;
   bufferMinutes: number;
 }
@@ -61,7 +72,19 @@ export interface DayAvailability {
 
 const MIN = 60_000;
 
-export const isBlocked = (rules: ScheduleRules, date: string) => rules.blocked.some((b) => b.startDate <= date && date <= b.endDate);
+/** Time off on `date` that applies to this service (or to the whole business when no service is given). */
+const timeOffOn = (rules: ScheduleRules, date: string, serviceId?: number) =>
+  rules.blocked.filter((b) => b.startDate <= date && date <= b.endDate && (b.serviceId == null || b.serviceId === serviceId));
+const isWholeDay = (b: TimeOff) => b.startMinute == null || b.endMinute == null;
+
+/** Is the whole day off (for everyone, or for this service)? */
+export const isBlocked = (rules: ScheduleRules, date: string, serviceId?: number) => timeOffOn(rules, date, serviceId).some(isWholeDay);
+
+/** The blocked time windows (minutes after midnight) on `date` for this service. */
+export const blockedWindows = (rules: ScheduleRules, date: string, serviceId?: number) =>
+  timeOffOn(rules, date, serviceId)
+    .filter((b) => !isWholeDay(b))
+    .map((b) => ({ startMinute: b.startMinute!, endMinute: b.endMinute! }));
 
 /** The local dates customers may book, today through the booking window. */
 export function windowDates(rules: ScheduleRules, now = new Date()) {
@@ -72,7 +95,7 @@ export function windowDates(rules: ScheduleRules, now = new Date()) {
 export function dayAvailability(rules: ScheduleRules, service: ServiceTiming, date: string, occupied: Occupied[], now = new Date()): DayAvailability {
   const closed: DayAvailability = { date, status: 'closed', slots: [], spotsLeft: null };
   const { first, last } = windowDates(rules, now);
-  if (date < first || date > last || isBlocked(rules, date)) return closed;
+  if (date < first || date > last || isBlocked(rules, date, service.id)) return closed;
   const hours = rules.hours.get(weekdayOf(date));
   if (!hours || hours.endMinute <= hours.startMinute) return closed;
 
@@ -87,7 +110,8 @@ export function dayAvailability(rules: ScheduleRules, service: ServiceTiming, da
     return { date, status: spotsLeft === 0 ? 'full' : 'open', slots: [], spotsLeft };
   }
 
-  const breaks = rules.breaks.filter((b) => b.weekday === weekdayOf(date));
+  // Breaks and blocked time windows both take slots out (date-only mode has no times, so only whole days apply there).
+  const breaks = [...rules.breaks.filter((b) => b.weekday === weekdayOf(date)), ...blockedWindows(rules, date, service.id)];
   const slots: Slot[] = [];
   let anyCandidate = false;
   const step = Math.max(5, rules.intervalMinutes);
@@ -148,13 +172,14 @@ export function checkBookable(
 }
 
 /** Does a booking still fit inside the (new) opening hours and breaks? */
-export function fitsHours(rules: ScheduleRules, b: { localDate: string; startsAt: Date; endsAt: Date; dateOnly: boolean }) {
-  if (isBlocked(rules, b.localDate)) return false;
+export function fitsHours(rules: ScheduleRules, b: { localDate: string; startsAt: Date; endsAt: Date; dateOnly: boolean; serviceId?: number }) {
+  if (isBlocked(rules, b.localDate, b.serviceId)) return false;
   const hours = rules.hours.get(weekdayOf(b.localDate));
   if (!hours) return false;
   if (b.dateOnly) return true;
   const start = toLocal(b.startsAt, rules.timeZone).minute;
   const end = start + Math.round((b.endsAt.getTime() - b.startsAt.getTime()) / MIN);
   if (start < hours.startMinute || end > hours.endMinute) return false;
+  if (blockedWindows(rules, b.localDate, b.serviceId).some((w) => start < w.endMinute && end > w.startMinute)) return false;
   return !rules.breaks.some((br) => br.weekday === weekdayOf(b.localDate) && start < br.endMinute && end > br.startMinute);
 }

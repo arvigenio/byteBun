@@ -1,6 +1,7 @@
 // Reminders (email / WhatsApp, plan rules, replaced on reschedule), no-show follow-up, and client
 // management from the admin site (plan changes, deactivate / reactivate, delete / restore /
 // purge, audit log).
+import { newCheckInCode } from '../src/clients/booking/check-in';
 import './env';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
@@ -133,7 +134,7 @@ describe('reminders', () => {
     const date = addDays(todayIn('America/Toronto'), -1);
     const customer = await db.customer.create({ data: { organizationId: orgId, email: 'gone@x.test', name: 'Gone' } });
     const startsAt = fromLocal(date, 600, 'America/Toronto');
-    const bk = await db.booking.create({ data: { organizationId: orgId, serviceId, customerId: customer.id, localDate: dateToDb(date), startsAt, endsAt: startsAt, blockedUntil: startsAt, manageNonce: 'n'.repeat(32) } });
+    const bk = await db.booking.create({ data: { organizationId: orgId, serviceId, customerId: customer.id, localDate: dateToDb(date), startsAt, endsAt: startsAt, blockedUntil: startsAt, manageNonce: 'n'.repeat(32), checkInCode: newCheckInCode() } });
     assert.equal((await b.post(`/api/client/bookings/items/${bk.id}/no-show`, { noShow: true })).status, 200);
     await notifications.flush();
     assert.ok(mailsFor('gone@x.test').some((m) => m.subject === 'We missed you at Smile Clinic'));
@@ -161,7 +162,7 @@ describe('admin site: client management', () => {
     assert.equal((await b.get('/api/client/me')).body.business.landing, 'portal');
     const down = await a.post(`/api/admin/clients/${orgId}/plan`, { planCode: 'free', addons: [] });
     assert.equal(down.status, 200);
-    assert.equal((await b.get('/api/client/me')).body.business.limits['bookings.monthly'], 60);
+    assert.equal((await b.get('/api/client/me')).body.business.limits['bookings.monthly'], 100);
 
     const events = await a.get(`/api/admin/clients/events?organizationId=${orgId}`);
     const changes = events.body.filter((e: { type: string }) => e.type === 'plan_changed');

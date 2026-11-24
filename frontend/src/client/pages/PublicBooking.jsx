@@ -46,6 +46,60 @@ export function BrandFrame({ branding, name, children }) {
   );
 }
 
+const LOCATION_ICON = { in_person: ICONS.pin, online: ICONS.video, phone: ICONS.phone };
+const LOCATION_SHORT = { in_person: 'In person', online: 'Online', phone: 'Phone call' };
+
+/** The services as cards (two columns on wide screens), with a filter once there are many. */
+function ServiceCards({ services, onPick }) {
+  const [filter, setFilter] = useState('');
+  const q = filter.trim().toLowerCase();
+  const shown = q ? services.filter((s) => `${s.name} ${s.description ?? ''}`.toLowerCase().includes(q)) : services;
+  return (
+    <div className="grid gap-3">
+      {services.length > 6 && <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search services" aria-label="Search services" />}
+      <div className={`grid gap-3 ${services.length > 1 ? 'desktop:grid-cols-2' : ''}`}>
+        {shown.map((s, i) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onPick(s.id)}
+            style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
+            className="group flex cursor-pointer flex-col rounded-xl border border-line bg-surface p-4 text-left transition-[border-color,box-shadow,transform] hover:border-brand hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-safe:animate-rise motion-safe:hover:-translate-y-0.5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand transition group-hover:bg-brand group-hover:text-brand-ink">
+                <Icon d={LOCATION_ICON[s.locationType] ?? ICONS.pin} className="size-5" />
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-xs font-semibold text-muted">
+                <Icon d={ICONS.clock} className="size-3.5" />
+                {duration(s.durationMinutes)}
+              </span>
+            </div>
+            <span className="mt-3 font-semibold text-ink">{s.name}</span>
+            {s.description && (
+              <span className="mt-1 line-clamp-2 text-sm text-muted" title={s.description}>
+                {s.description}
+              </span>
+            )}
+            {/* Pushes the footer down so the cards in a row line up. */}
+            <span className="min-h-3 flex-1" aria-hidden="true" />
+            <span className="flex items-center justify-between gap-2 border-t border-line pt-3 text-xs text-faint">
+              <span className="min-w-0 truncate" title={s.locationType === 'in_person' && s.address ? s.address : undefined}>
+                {s.locationType === 'in_person' && s.address ? s.address : LOCATION_SHORT[s.locationType]}
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 font-semibold text-brand">
+                Select
+                <Icon d="M9 6l6 6-6 6" className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {!shown.length && <p className="text-sm text-muted">No services match “{filter}”.</p>}
+    </div>
+  );
+}
+
 function Location({ service }) {
   if (service.locationType === 'in_person' && service.address) {
     return (
@@ -88,34 +142,38 @@ export function PublicBookingPage({ slug }) {
     <BrandFrame branding={branding} name={business.name}>
       <header className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">{business.name}</h1>
-        {business.instructions && <p className="mt-2 whitespace-pre-line text-muted">{business.instructions}</p>}
+        {/* Sanitized by the API (sanitize-html: paragraphs, emphasis, lists, links). */}
+        {business.instructions && <div className="rich mt-2 text-muted" dangerouslySetInnerHTML={{ __html: business.instructions }} />}
       </header>
 
       {status === 'unavailable' ? (
         <Closed title="Online booking is currently unavailable" phone={business.phone} />
-      ) : status === 'month_full' ? (
-        <Closed title="No more online bookings available this month" phone={business.phone} />
       ) : done ? (
         <Confirmed done={done} business={business} service={service} onAgain={() => (setDone(null), setPick(null))} />
       ) : !services.length ? (
         <Closed title="No services are open for booking yet" phone={business.phone} />
       ) : (
         <div className="flex flex-col gap-5">
-          <Step n={1} title="Choose a service" done={!!service} summary={service && `${service.name} · ${duration(service.durationMinutes)}`} onEdit={services.length > 1 ? () => (setServiceId(null), setPick(null)) : null}>
-            <div className="grid gap-2">
-              {services.map((s) => (
-                <button key={s.id} type="button" onClick={() => setServiceId(s.id)} className="cursor-pointer rounded-btn border border-line bg-surface p-4 text-left transition hover:border-brand">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="font-semibold">{s.name}</span>
-                    <span className="shrink-0 text-sm text-muted">{duration(s.durationMinutes)}</span>
-                  </div>
-                  {s.description && <p className="mt-1 text-sm text-muted">{s.description}</p>}
-                  <p className="mt-2 text-xs text-faint">
-                    <Location service={s} />
-                  </p>
-                </button>
-              ))}
-            </div>
+          {status === 'month_full' && <MonthFull business={business} />}
+          <Step
+            n={1}
+            title="Choose a service"
+            done={!!service}
+            summary={
+              service && (
+                <span className="flex flex-col gap-1">
+                  <span className="font-medium text-ink">
+                    {service.name} · {duration(service.durationMinutes)}
+                  </span>
+                  <span className="text-xs">
+                    <Location service={service} />
+                  </span>
+                </span>
+              )
+            }
+            onEdit={services.length > 1 ? () => (setServiceId(null), setPick(null)) : null}
+          >
+            <ServiceCards services={services} onPick={setServiceId} />
           </Step>
           {service && (
             <Step n={2} title={business.mode === 'date' ? 'Choose a day' : 'Choose a time'} done={!!pick} summary={pick && pickLabel(pick, business)} onEdit={() => setPick(null)}>
@@ -221,6 +279,31 @@ function Confirmed({ done, business, service, onAgain }) {
         Book another appointment
       </button>
     </section>
+  );
+}
+
+/** The free plan's monthly limit is reached: the calendar shows, every date disabled, until the 1st. */
+function MonthFull({ business }) {
+  const [y, m] = todayIn(business.timeZone).split('-').map(Number);
+  const reopens = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10); // the 1st of next month
+  const phone = business.phone;
+  return (
+    <div className="rounded-card border border-warn/30 bg-warn-soft px-5 py-4 text-sm text-warn" role="status">
+      <p className="font-semibold">No more online bookings available this month</p>
+      <p className="mt-1">
+        Online booking opens again on {fmtLongDate(reopens)}.
+        {phone && (
+          <>
+            {' '}
+            To book sooner, please call{' '}
+            <a className="font-medium underline" href={`tel:${phone.replace(/[^+\d]/g, '')}`}>
+              {phone}
+            </a>
+            .
+          </>
+        )}
+      </p>
+    </div>
   );
 }
 

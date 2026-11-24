@@ -5,7 +5,7 @@
 //   GET    /api/client/bookings/settings                 settings + hours + breaks
 //   PUT    /api/client/bookings/settings                 -> { settings, outsideHours }
 //   PUT    /api/client/bookings/hours  { hours, breaks } -> { outsideHours }
-//   GET    /api/client/bookings/blocked-dates
+//   GET    /api/client/bookings/blocked-dates           time off (whole days or time windows, all or one service)
 //   POST   /api/client/bookings/blocked-dates           409 { conflicts } unless existing=keep|cancel
 //   DELETE /api/client/bookings/blocked-dates/:id
 //   GET    /api/client/bookings/services   POST   PATCH /:id   DELETE /:id
@@ -14,6 +14,8 @@
 //   POST   /api/client/bookings/items/:id/cancel  { reason, notify }
 //   POST   /api/client/bookings/items/:id/reschedule  { startsAt | date }
 //   POST   /api/client/bookings/items/:id/no-show  { noShow }
+//   POST   /api/client/bookings/check-in  { code } | { id }, force   attendance (QR scan or typed code)
+//   POST   /api/client/bookings/items/:id/check-in/undo
 //   GET    /api/client/bookings/availability?serviceId&from&to
 //   GET    /api/client/bookings/export.csv                 every booking (owners, admins)
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res } from '@nestjs/common';
@@ -22,17 +24,19 @@ import type * as yup from 'yup';
 import { ApiError } from '../../common/api-error';
 import { YupValidationPipe } from '../../common/yup-validation.pipe';
 import { APP_CONFIG, type AppConfig } from '../../config/config';
-import { cleanInstructions } from '../client-emails';
+import { logger } from '../../logging/logger';
+import { cleanInstructions, richInstructions } from '../client-emails';
 import { ClientsDb } from '../clients-db';
 import { ClientRoute, type ClientContext } from '../client-context';
 import { hasFeature, limitOf } from '../entitlements';
 import { BookingEngine, loadRules, monthlyUsage, occupiedBetween } from './booking-engine';
+import { formatCheckInCode, parseCheckInCode } from './check-in';
 import { csvFor } from './csv';
 import { BookingNotifications } from './notifications';
 import { parseReminders, planProblem } from './reminders';
 import { fitsHours, rangeAvailability } from './schedule';
-import { blockedDateSchema, bookSchema, cancelSchema, hoursSchema, noShowSchema, rescheduleSchema, serviceSchema, servicePatchSchema, settingsSchema } from './schemas';
-import { addDays, dateFromDb, dateToDb, isDate, todayIn } from './time';
+import { blockedDateSchema, bookSchema, cancelSchema, checkInSchema, hoursSchema, noShowSchema, rescheduleSchema, serviceSchema, servicePatchSchema, settingsSchema } from './schemas';
+import { addDays, dateFromDb, dateToDb, isDate, todayIn, toLocal } from './time';
 
 const ctx = (req: Request) => req.client as ClientContext;
 const VIEW = { app: 'bookings', permission: 'bookings.view' } as const;
@@ -40,6 +44,11 @@ const MANAGE = { app: 'bookings', permission: 'bookings.manage' } as const;
 const SETTINGS = { app: 'bookings', permission: 'bookings.settings' } as const;
 /** Paid-only branding fields (free: logo, name, instructions, primary color). */
 const FULL_BRANDING_FIELDS = ['accentColor', 'backgroundColor', 'theme', 'font', 'buttonStyle'] as const;
+
+/** Time off as the app shows it. */
+function timeOffRow(r: { id: number; startDate: Date; endDate: Date; startMinute: number | null; endMinute: number | null; reason: string | null; service: { id: number; name: string } | null }) {
+  return { id: r.id, startDate: dateFromDb(r.startDate), endDate: dateFromDb(r.endDate), startMinute: r.startMinute, endMinute: r.endMinute, service: r.service, reason: r.reason };
+}
 
 export function bookingRow(b: {
   id: number;
@@ -55,6 +64,8 @@ export function bookingRow(b: {
   cancelledBy: string | null;
   cancelReason: string | null;
   noShowAt?: Date | null;
+  checkInCode?: string;
+  checkedInAt?: Date | null;
   service: { id: number; name: string };
   customer: { name: string; email: string; phone: string | null };
 }) {
@@ -72,6 +83,8 @@ export function bookingRow(b: {
     cancelledBy: b.cancelledBy,
     cancelReason: b.cancelReason,
     noShowAt: b.noShowAt ?? null,
+    checkInCode: b.checkInCode ? formatCheckInCode(b.checkInCode) : null,
+    checkedInAt: b.checkedInAt ?? null,
     service: { id: b.service.id, name: b.service.name },
     customer: b.customer,
   };
@@ -101,7 +114,7 @@ export class BookingAdminController {
       orderBy: { startsAt: 'asc' },
       take: 500,
     });
-    return upcoming.filter((b) => !fitsHours(rules, { localDate: dateFromDb(b.localDate), startsAt: b.startsAt, endsAt: b.endsAt, dateOnly: b.dateOnly })).map(bookingRow);
+    return upcoming.filter((b) => !fitsHours(rules, { localDate: dateFromDb(b.localDate), startsAt: b.startsAt, endsAt: b.endsAt, dateOnly: b.dateOnly, serviceId: b.serviceId })).map(bookingRow);
   }
 
   @Get('overview')
@@ -159,6 +172,7 @@ export class BookingAdminController {
     const data: Record<string, unknown> = { ...body };
     if (!hasFeature(c.entitlements, 'bookings.full_branding')) for (const f of FULL_BRANDING_FIELDS) delete data[f];
     if ('privateInstructions' in data) data.privateInstructions = cleanInstructions(body.privateInstructions);
+    if ('pageInstructions' in data) data.pageInstructions = richInstructions(body.pageInstructions);
     if (body.reminders) {
       const rules = parseReminders(body.reminders);
       const problem = planProblem(rules, c.entitlements);
@@ -205,8 +219,12 @@ export class BookingAdminController {
   @Get('blocked-dates')
   @ClientRoute(VIEW)
   async blocked(@Req() req: Request) {
-    const rows = await this.db.blockedDate.findMany({ where: { organizationId: ctx(req).org.id, endDate: { gte: dateToDb(addDays(new Date().toISOString().slice(0, 10), -1)) } }, orderBy: { startDate: 'asc' } });
-    return rows.map((r) => ({ id: r.id, startDate: dateFromDb(r.startDate), endDate: dateFromDb(r.endDate), reason: r.reason }));
+    const rows = await this.db.blockedDate.findMany({
+      where: { organizationId: ctx(req).org.id, endDate: { gte: dateToDb(addDays(new Date().toISOString().slice(0, 10), -1)) } },
+      include: { service: { select: { id: true, name: true } } },
+      orderBy: [{ startDate: 'asc' }, { startMinute: 'asc' }],
+    });
+    return rows.map(timeOffRow);
   }
 
   @Post('blocked-dates')
@@ -216,19 +234,41 @@ export class BookingAdminController {
     const startDate = body.startDate;
     const endDate = body.endDate && body.endDate >= startDate ? body.endDate : startDate;
     if (addDays(startDate, 366) < endDate) throw new ApiError(400, { error: 'validation_failed', message: 'Block at most one year at a time.', fields: { endDate: 'At most one year.' } });
-    const conflicts = await this.db.booking.findMany({
-      where: { organizationId: c.org.id, status: 'confirmed', localDate: { gte: dateToDb(startDate), lte: dateToDb(endDate) } },
+    const window = body.startMinute != null && body.endMinute != null ? { startMinute: body.startMinute, endMinute: body.endMinute } : null;
+    const serviceId = body.serviceId ?? null;
+    if (serviceId && !(await this.db.service.findFirst({ where: { id: serviceId, organizationId: c.org.id }, select: { id: true } }))) {
+      throw new ApiError(400, { error: 'validation_failed', message: 'Please choose a service.', fields: { serviceId: 'That service does not exist.' } });
+    }
+    const { rules } = await this.rules(c.org.id);
+    if (window && rules.mode === 'date') {
+      throw new ApiError(400, { error: 'validation_failed', message: 'Customers book by day only, so time off is whole days.', fields: { startMinute: 'Whole days only in date-only mode.' } });
+    }
+    const onDates = await this.db.booking.findMany({
+      where: { organizationId: c.org.id, status: 'confirmed', localDate: { gte: dateToDb(startDate), lte: dateToDb(endDate) }, ...(serviceId ? { serviceId } : {}) },
       include: { service: { select: { id: true, name: true } }, customer: { select: { name: true, email: true, phone: true } } },
       orderBy: { startsAt: 'asc' },
     });
+    // A time window only conflicts with timed bookings that overlap it (date-only bookings hold no time).
+    const conflicts = window
+      ? onDates.filter((b) => {
+          if (b.dateOnly) return false;
+          const start = toLocal(b.startsAt, rules.timeZone).minute;
+          const end = start + Math.round((b.endsAt.getTime() - b.startsAt.getTime()) / 60_000);
+          return start < window.endMinute && end > window.startMinute;
+        })
+      : onDates;
     if (conflicts.length && body.existing === 'ask') {
       throw new ApiError(409, { error: 'has_bookings', message: `${conflicts.length} booking(s) already fall on these dates. Keep them, or cancel them and tell the customers?`, conflicts: conflicts.map(bookingRow) });
     }
-    const row = await this.db.blockedDate.create({ data: { organizationId: c.org.id, startDate: dateToDb(startDate), endDate: dateToDb(endDate), reason: body.reason ?? null } });
+    const row = await this.db.blockedDate.create({
+      data: { organizationId: c.org.id, startDate: dateToDb(startDate), endDate: dateToDb(endDate), startMinute: window?.startMinute ?? null, endMinute: window?.endMinute ?? null, serviceId, reason: body.reason ?? null },
+      include: { service: { select: { id: true, name: true } } },
+    });
     if (conflicts.length && body.existing === 'cancel') {
-      for (const b of conflicts) await this.engine.cancel(c.org.id, b.id, { by: 'business', reason: body.reason || 'The business is closed on this date.', notifyCustomer: true });
+      const fallback = window ? 'The business is not available at this time.' : 'The business is closed on this date.';
+      for (const b of conflicts) await this.engine.cancel(c.org.id, b.id, { by: 'business', reason: body.reason || fallback, notifyCustomer: true });
     }
-    return { id: row.id, startDate, endDate, reason: row.reason, cancelled: body.existing === 'cancel' ? conflicts.length : 0 };
+    return { ...timeOffRow(row), cancelled: body.existing === 'cancel' ? conflicts.length : 0 };
   }
 
   @Delete('blocked-dates/:id')
@@ -305,6 +345,8 @@ export class BookingAdminController {
     if (view === 'upcoming') Object.assign(where, { status: 'confirmed', endsAt: { gt: now } });
     else if (view === 'past') Object.assign(where, { status: 'confirmed', endsAt: { lte: now } });
     else if (view === 'cancelled') Object.assign(where, { status: 'cancelled' });
+    // Over, and nobody checked the customer in.
+    else if (view === 'unattended') Object.assign(where, { status: 'confirmed', endsAt: { lte: now }, checkedInAt: null });
     if (isDate(from) || isDate(to)) where.localDate = { ...(isDate(from) && { gte: dateToDb(from) }), ...(isDate(to) && { lte: dateToDb(to) }) };
     const rows = await this.db.booking.findMany({
       where,
@@ -347,6 +389,50 @@ export class BookingAdminController {
   }
 
   /** Mark (or unmark) a past booking as a no-show; the customer gets a follow-up if enabled. */
+  /**
+   * Attendance. Checks the customer in when the booking is today and not over. Otherwise it says
+   * why (another day, over, cancelled, already checked in) and checks in only with `force`; the
+   * Check-in page then offers to move the booking or book it again for today.
+   */
+  @Post('check-in')
+  @HttpCode(200)
+  @ClientRoute(MANAGE)
+  async checkIn(@Req() req: Request, @Body(new YupValidationPipe(checkInSchema)) body: yup.InferType<typeof checkInSchema>) {
+    const c = ctx(req);
+    const code = body.code ? parseCheckInCode(body.code) : null;
+    if (!body.id && !code) throw new ApiError(400, { error: 'validation_failed', message: 'That is not a check-in code. Codes have 8 letters and numbers, like ABCD-EFGH.', fields: { code: 'Please check the code.' } });
+    const b = await this.db.booking.findFirst({
+      where: { organizationId: c.org.id, ...(body.id ? { id: body.id } : { checkInCode: code! }) },
+      include: { service: { select: { id: true, name: true } }, customer: { select: { name: true, email: true, phone: true } } },
+    });
+    if (!b) throw new ApiError(404, { error: 'not_found', message: 'No booking matches this code.' });
+    const { rules } = await this.rules(c.org.id);
+    const today = todayIn(rules.timeZone);
+    const now = new Date();
+    const date = dateFromDb(b.localDate);
+    const over = date < today || (date === today && !b.dateOnly && b.endsAt <= now);
+    const state = b.status === 'cancelled' ? 'cancelled' : b.checkedInAt ? 'already' : date > today ? 'other_day' : over ? 'expired' : 'ok';
+    let row = b;
+    if (state === 'ok' || (body.force && (state === 'other_day' || state === 'expired'))) {
+      row = await this.db.booking.update({
+        where: { id: b.id },
+        data: { checkedInAt: now, checkedInBy: c.user.id, noShowAt: null },
+        include: { service: { select: { id: true, name: true } }, customer: { select: { name: true, email: true, phone: true } } },
+      });
+      logger.info({ org: c.org.id, bookingId: b.id, state }, 'Client booking checked in');
+    }
+    return { state, checkedIn: !!row.checkedInAt && row.checkedInAt.getTime() === now.getTime(), today, booking: bookingRow(row) };
+  }
+
+  @Post('items/:id/check-in/undo')
+  @HttpCode(200)
+  @ClientRoute(MANAGE)
+  async undoCheckIn(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
+    const { count } = await this.db.booking.updateMany({ where: { id, organizationId: ctx(req).org.id }, data: { checkedInAt: null, checkedInBy: null } });
+    if (!count) throw new ApiError(404, { error: 'not_found', message: 'That booking does not exist.' });
+    return { ok: true };
+  }
+
   @Post('items/:id/no-show')
   @HttpCode(200)
   @ClientRoute(MANAGE)

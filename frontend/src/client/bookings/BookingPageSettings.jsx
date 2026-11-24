@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useConfigQuery, useMeQuery, useSaveSettingsMutation, useSettingsQuery } from '../api.js';
-import { RichText } from '../components/RichText.jsx';
+import { asHtml, RichText } from '../components/RichText.jsx';
 import { contrast, inkOn, isHex } from '../lib/color.js';
 import { pageSchema } from '../lib/schemas.js';
 import { bookingsBase } from '../lib/surface.js';
@@ -29,7 +29,7 @@ function PageForm({ data, cfg, edit }) {
   const defaults = {
     businessName: s.businessName,
     slug: s.slug,
-    pageInstructions: s.pageInstructions ?? '',
+    pageInstructions: asHtml(s.pageInstructions),
     privateInstructions: s.privateInstructions ?? '',
     primaryColor: s.primaryColor,
     accentColor: s.accentColor ?? '#F59E0B',
@@ -98,8 +98,8 @@ function PageForm({ data, cfg, edit }) {
                 <Field label="Booking link" hint={url} error={err('slug')}>
                   {(a) => <Input {...a} {...register('slug')} />}
                 </Field>
-                <Field label="Instructions on the booking page" hint="Public. E.g. “Please arrive 10 minutes early.”" error={err('pageInstructions')}>
-                  {(a) => <Textarea {...a} rows={3} {...register('pageInstructions')} />}
+                <Field label="Instructions on the booking page" hint="Public: shown at the top of your booking page, as formatted here." error={err('pageInstructions')}>
+                  {({ id }) => <Controller control={control} name="pageInstructions" render={({ field }) => <RichText id={id} value={field.value} onChange={field.onChange} placeholder="Please arrive 10 minutes early." />} />}
                 </Field>
                 <Field label="Instructions in every confirmation and reminder" hint="Private: never on the public page. Parking, entrance, gate code, what to bring. Per-service instructions are on Services." error={err('privateInstructions')}>
                   {({ id }) => <Controller control={control} name="privateInstructions" render={({ field }) => <RichText id={id} value={field.value} onChange={field.onChange} placeholder="Parking is behind the building. Gate code 1234." />} />}

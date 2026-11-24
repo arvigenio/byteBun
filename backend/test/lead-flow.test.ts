@@ -70,7 +70,7 @@ describe('new lead', () => {
     assert.match(mail.text, /America\/New_York/, 'times in their time zone');
     const ics = mail.attachments?.find((a) => a.filename === 'invite.ics');
     assert.ok(ics, 'has an .ics');
-    assert.match(ics.content, /BEGIN:VEVENT[\s\S]*UID:booking-\d+@bytebuntech\.com[\s\S]*SEQUENCE:0[\s\S]*DTSTART:\d{8}T\d{6}Z/);
+    assert.match(String(ics.content), /BEGIN:VEVENT[\s\S]*UID:booking-\d+@bytebuntech\.com[\s\S]*SEQUENCE:0[\s\S]*DTSTART:\d{8}T\d{6}Z/);
     const row = await t.prisma.booking.findFirstOrThrow({ where: { leadId: lead.id } });
     assert.ok(row.confirmationSentAt, 'marked as sent');
     assert.ok(row.reminderAt, 'reminder planned');
@@ -123,7 +123,7 @@ describe('admin reschedule and cancel', () => {
     assert.ok(toLead.html!.includes('We had to move your call'));
     assert.ok(toLead.html!.includes('A note from our team'));
     assert.ok(toLead.html!.includes('Our team lead is joining'));
-    assert.match(toLead.attachments![0].content, /SEQUENCE:1/);
+    assert.match(String(toLead.attachments![0].content), /SEQUENCE:1/);
     const toAdmins = await waitForMail((m) => m.subject.startsWith("Josue Mapagdalita moved Maria Santos's call to "));
     assert.deepEqual(toAdmins.to, [ARVI], 'only the other admin');
     assert.match(toAdmins.subject, /at \d{1,2}:\d{2} (AM|PM) \(PH time\)$/);
@@ -152,7 +152,7 @@ describe('admin reschedule and cancel', () => {
     assert.ok(toLead.html!.includes('We had to cancel your call'));
     assert.ok(toLead.html!.includes('closed for a holiday'));
     assert.ok(toLead.html!.includes('/manage-booking#t='), 'link to book a new time');
-    assert.match(toLead.attachments![0].content, /METHOD:CANCEL[\s\S]*STATUS:CANCELLED/);
+    assert.match(String(toLead.attachments![0].content), /METHOD:CANCEL[\s\S]*STATUS:CANCELLED/);
     const toAdmins = await waitForMail((m) => m.subject.startsWith("Arvi Genio cancelled Maria Santos's call on "));
     assert.deepEqual(toAdmins.to, [JOSUE]);
     assert.equal((await b.post(`/api/admin/bookings/${booking.id}/cancel`, {})).status, 404, 'already cancelled');

@@ -161,7 +161,7 @@ export const site = {
   packages: {
     eyebrow: 'Pricing',
     title: 'Simple plans for every clinic',
-    subtitle: 'We build and run your website and patient system for you. Prices in USD.',
+    subtitle: 'We build and run your website and business system for you. Prices in USD.',
     // Plans with `onSite: false` are not shown on bytebuntech.com (only in the Bookings app's
     // Plan page, for clients already on them).
     billing: { monthly: 'Monthly', yearly: 'Pay yearly', yearlyNote: '2 months free' },
@@ -171,7 +171,7 @@ export const site = {
         onSite: false,
         price: { monthly: '$0', yearly: '$0' },
         blurb: 'Online booking for new and small businesses.',
-        features: ['Calendar Booking (up to 60 bookings/month)', 'Email confirmations + reminders (2 days / 1 day before)', 'Survey (basic)'],
+        features: ['Calendar Booking (up to 100 bookings/month, 5 services)', 'Email confirmations + reminders (2 days / 1 day before)', 'Survey (basic)'],
         cta: { label: 'Start Free', href: 'https://bookings.bytebuntech.com/', newTab: false },
       },
       {
@@ -185,9 +185,9 @@ export const site = {
       {
         name: 'Premium',
         price: { monthly: '$79', yearly: '$790' },
-        blurb: 'Your website and patient system, built and run for you.',
+        blurb: 'Your website and business system, built and run for you.',
         features: [
-          'Dental or Vet Clinic Management System access',
+          'Business Management System access (clinics, salons, studios & more)',
           'Professional website, domain, hosting & SSL',
           'Lead capture',
           'Calendar Booking with unlimited WhatsApp + email reminders (customizable down to 1 hour before)',
@@ -203,8 +203,7 @@ export const site = {
       },
       {
         name: 'Growth',
-        // PENDING: confirm $89 vs $99 (and $890 yearly) before publishing.
-        price: { monthly: '$89', yearly: '$890' },
+        price: { monthly: '$109', yearly: '$1,090' },
         blurb: 'Everything in Premium, with AI chat and more content every week.',
         features: ['Everything in Premium, plus:', 'Website AI Chatbot', 'Social Media AI Chatbot (Facebook + Instagram)', 'Email Marketing'],
         included: ['6 website updates + 1 larger update', '4 SEO blog posts (weekly)', '4 AI marketing videos (weekly)', 'Priority turnaround (2 business days)'],
@@ -308,7 +307,7 @@ export const site = {
       },
       { q: 'Do unused updates roll over?', a: 'No, allowances reset monthly.' },
       { q: 'Can I upgrade or downgrade?', a: 'Yes, anytime. Changes apply from your next billing cycle.' },
-      { q: 'Is the clinic management system included?', a: 'Yes. Premium and Growth include access to our Dental or Vet Clinic Management System.' },
+      { q: 'Is the business management system included?', a: 'Yes. Premium and Growth include access to our Business Management System, set up for your kind of business: dental and vet clinics, aesthetic clinics, salons, studios and other appointment-based businesses.' },
       { q: 'Is WhatsApp unlimited?', a: 'Yes on Premium and Growth, subject to fair use.' },
       { q: 'How do I get started with Premium or Growth?', a: "Book a free consultation. We'll review your clinic's needs and send a proposal with everything included." },
       { q: 'Are the website, domain, and hosting included?', a: 'Yes, on Premium and Growth. The website, domain registration, hosting, and SSL certificate are included while your plan is active. Plans have a minimum term, which we explain in your proposal before you sign.' },

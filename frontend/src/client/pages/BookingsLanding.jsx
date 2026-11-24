@@ -95,8 +95,8 @@ const STEPS = [
 ];
 
 const FAQ = [
-  { q: 'Is it really free?', a: 'Yes. The Free plan includes up to 60 bookings a month, email confirmations and reminders, and your own booking page, with no card needed.' },
-  { q: 'What happens after 60 bookings in a month?', a: 'Your page shows that online booking is full for the month until the 1st, and you get an email at 48 and 60. Bookings Pro removes the limit.' },
+  { q: 'Is it really free?', a: 'Yes. The Free plan includes up to 100 bookings a month and 5 services, email confirmations and reminders, and your own booking page, with no card needed.' },
+  { q: 'What happens after 100 bookings in a month?', a: 'Your page shows that online booking is full for the month until the 1st, and you get an email at 80 and 100. Bookings Pro removes the limit.' },
   { q: 'Do my customers need an account?', a: 'No. They book with their name and email, and manage their booking from the private link in their confirmation.' },
   { q: 'What kind of business can use it?', a: 'Any business that takes appointments or reservations: salons, studios, coaches, tutors, consultants, repair and cleaning services, clinics and more. Services can have their own duration and buffer, several people can book the same slot, and you set breaks and holidays.' },
   { q: 'What happens to old bookings on the Free plan?', a: 'They are deleted 60 days after the appointment date. You get an email a week before with a CSV download. On Bookings Pro, your history is kept.' },
@@ -355,7 +355,7 @@ export function BookingsLanding() {
           <div className="relative mx-auto grid max-w-6xl items-center gap-14 desktop:grid-cols-[1.1fr_1fr]">
             <div data-reveal="left">
               <span className="inline-flex items-center gap-2 rounded-full border border-brand/25 bg-brand-soft px-3 py-1 text-sm font-medium text-brand">
-                <span className="size-2 rounded-full bg-brand" /> Free for up to 60 bookings a month
+                <span className="size-2 rounded-full bg-brand" /> Free for up to 100 bookings a month
               </span>
               <h1 className="mt-5 text-5xl leading-[1.05] font-bold tracking-tight mobile:text-[38px]">
                 Online booking your customers <span className="text-brand">actually use.</span>

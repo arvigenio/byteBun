@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useManageAvailabilityQuery, useManageCancelMutation, useManageQuery, useManageRescheduleMutation } from '../api.js';
 import { SlotPicker } from '../components/SlotPicker.jsx';
 import { fmtLongDate, fmtTime, LOCATION_LABEL, todayIn, zoneName } from '../lib/format.js';
-import { Button, Loading } from '../ui.jsx';
+import { Badge, Button, Loading } from '../ui.jsx';
 import { BrandFrame } from './PublicBooking.jsx';
 
 // The customer's private link: /manage#t=<token> (from their emails). No login. The token stays
@@ -76,6 +76,7 @@ export function ManageBookingPage() {
         <p className="text-muted">{when(booking, tz)}</p>
         <p className="mt-1 text-sm text-faint">{booking.service.locationType === 'in_person' && booking.service.address ? booking.service.address : LOCATION_LABEL[booking.service.locationType]}</p>
       </section>
+      {booking.checkIn && result !== 'cancelled' && state !== 'over' && <CheckInCode checkIn={booking.checkIn} />}
       <section className="mt-4 rounded-card border border-line bg-surface p-5">{body}</section>
     </BrandFrame>
   );
@@ -136,5 +137,29 @@ function Message({ title, children }) {
       <h1 className="text-xl font-semibold">{title}</h1>
       <p className="mt-2 text-muted">{children}</p>
     </BrandFrame>
+  );
+}
+
+/** The attendance QR code (and its code, for when the scan doesn't work), to show at the front desk. */
+function CheckInCode({ checkIn }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => {
+    let live = true;
+    import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(checkIn.url, { width: 320, margin: 1, errorCorrectionLevel: 'M' }).then((url) => live && setSrc(url)));
+    return () => {
+      live = false;
+    };
+  }, [checkIn.url]);
+  return (
+    <section className="mt-4 rounded-card border-2 border-dashed border-brand/40 bg-surface p-5 text-center">
+      <div className="flex items-center justify-center gap-2">
+        <h2 className="text-sm font-bold tracking-wide text-ink uppercase">Your check-in code</h2>
+        {checkIn.checkedInAt && <Badge tone="ok">Checked in</Badge>}
+      </div>
+      <p className="mt-1 text-sm text-muted">Show this at the front desk when you arrive.</p>
+      <div className="mx-auto mt-4 grid size-44 place-items-center rounded-xl bg-white p-2 shadow-sm">{src ? <img src={src} alt="Check-in QR code" className="size-full" /> : <Loading label="" />}</div>
+      <p className="mt-4 font-mono text-2xl font-bold tracking-[0.3em] text-ink">{checkIn.code}</p>
+      <p className="mt-1 text-xs text-faint">If the scan doesn’t work, give them this code.</p>
+    </section>
   );
 }

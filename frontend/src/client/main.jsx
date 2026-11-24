@@ -5,11 +5,14 @@ import { Toaster } from 'sonner';
 import './client.css';
 import ClientApp from './ClientApp.jsx';
 import { clientStore } from './store.js';
+import { AskProvider } from './ui.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Provider store={clientStore}>
-      <ClientApp />
+      <AskProvider>
+        <ClientApp />
+      </AskProvider>
       <Toaster position="top-center" richColors closeButton />
     </Provider>
   </StrictMode>,

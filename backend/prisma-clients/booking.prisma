@@ -81,10 +81,17 @@ model BlockedDate {
   organizationId String   @map("organization_id")
   startDate      DateTime @map("start_date") @db.Date
   endDate        DateTime @map("end_date") @db.Date
+  /// Part of a day: minutes after midnight (both set) on each date; both null = the whole day.
+  startMinute    Int?     @map("start_minute")
+  endMinute      Int?     @map("end_minute")
+  /// One service only; null = the whole business.
+  serviceId      Int?     @map("service_id")
+  service        Service? @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   reason         String?  @db.VarChar(200)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([organizationId, startDate])
+  @@index([serviceId])
   @@map("blocked_dates")
   @@schema("booking")
 }
@@ -108,6 +115,7 @@ model Service {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   bookings        Booking[]
+  timeOff         BlockedDate[]
 
   @@index([organizationId, position])
   @@map("services")
@@ -152,6 +160,11 @@ model Booking {
   cancelReason   String?        @map("cancel_reason") @db.VarChar(500)
   // Marked by the business when the customer didn't come.
   noShowAt       DateTime?      @map("no_show_at") @db.Timestamptz(3)
+  // Attendance: the code in the emails' QR code (8 characters, no look-alikes), and when the
+  // front desk checked the customer in (and who: a user id).
+  checkInCode    String         @map("check_in_code") @db.Char(8)
+  checkedInAt    DateTime?      @map("checked_in_at") @db.Timestamptz(3)
+  checkedInBy    String?        @map("checked_in_by")
   // Bumped on each reschedule (calendar SEQUENCE).
   sequence       Int            @default(0)
   // Behind the customer's cancel/reschedule link (src/clients/booking/manage-token.ts).
@@ -163,6 +176,7 @@ model Booking {
   updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   notifications  Notification[]
 
+  @@unique([organizationId, checkInCode])
   @@index([organizationId, localDate])
   @@index([organizationId, startsAt])
   @@index([organizationId, createdAt])

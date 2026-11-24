@@ -6,7 +6,7 @@ import { useCreateServiceMutation, useDeleteServiceMutation, useMeQuery, useServ
 import { RichText } from '../components/RichText.jsx';
 import { duration, LOCATION_LABEL } from '../lib/format.js';
 import { serviceSchema } from '../lib/schemas.js';
-import { Badge, Button, Dialog, Empty, Field, Input, Loading, Notice, PageHeader, Select, Textarea } from '../ui.jsx';
+import { Badge, Button, Dialog, Empty, Field, IconButton, ICONS, Input, Loading, Notice, PageHeader, Select, Textarea, useConfirm } from '../ui.jsx';
 import { can } from './BookingsApp.jsx';
 
 const EMPTY = { name: '', description: '', durationMinutes: 30, bufferMinutes: 0, locationType: 'in_person', address: '', meetingUrl: '', instructions: '' };
@@ -17,6 +17,7 @@ export function ServicesPage() {
   const [editing, setEditing] = useState(null);
   const [update] = useUpdateServiceMutation();
   const [remove] = useDeleteServiceMutation();
+  const confirm = useConfirm();
   const edit = can(me, 'bookings.settings');
   const services = q.data?.services ?? [];
   const limit = q.data?.limit;
@@ -51,32 +52,33 @@ export function ServicesPage() {
                 </p>
               </div>
               {edit && (
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(s)}>
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
+                <div className="flex gap-0.5">
+                  <IconButton icon={ICONS.pencil} label={`Edit ${s.name}`} onClick={() => setEditing(s)} />
+                  <IconButton
+                    icon={s.active ? ICONS.eyeOff : ICONS.eye}
+                    label={s.active ? `Hide ${s.name} from the booking page` : `Show ${s.name} on the booking page`}
                     onClick={async () => {
                       const r = await update({ id: s.id, active: !s.active });
                       if (r.error) toast.error(r.error.message);
+                      else toast.success(s.active ? 'Service hidden' : 'Service shown');
                     }}
-                  >
-                    {s.active ? 'Hide' : 'Show'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
+                  />
+                  <IconButton
+                    icon={ICONS.trash}
+                    tone="danger"
+                    label={`Delete ${s.name}`}
                     onClick={async () => {
-                      if (!window.confirm(`Delete “${s.name}”?`)) return;
+                      const sure = await confirm({
+                        title: `Delete “${s.name}”?`,
+                        body: 'Customers can no longer book it. If it already has bookings, it is hidden instead, so those bookings keep their details.',
+                        action: 'Delete service',
+                      });
+                      if (!sure) return;
                       const r = await remove(s.id);
                       if (r.error) return toast.error(r.error.message);
                       toast.success(r.data.archived ? 'It has bookings, so it was hidden instead of deleted.' : 'Service deleted');
                     }}
-                  >
-                    Delete
-                  </Button>
+                  />
                 </div>
               )}
             </li>
@@ -113,6 +115,8 @@ function ServiceDialog({ service, onClose }) {
       open
       wide
       onClose={onClose}
+      dirty={formState.isDirty}
+      busy={formState.isSubmitting}
       title={isNew ? 'Add service' : `Edit ${service.name}`}
       footer={
         <>

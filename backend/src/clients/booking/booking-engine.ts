@@ -9,6 +9,7 @@ import { ApiError } from '../../common/api-error';
 import { logger } from '../../logging/logger';
 import { ClientsDb, type ClientsTx } from '../clients-db';
 import { limitOf, loadEntitlements } from '../entitlements';
+import { newCheckInCode } from './check-in';
 import { newNonce } from './manage-token';
 import { BookingNotifications } from './notifications';
 import { checkBookable, type Occupied, type ScheduleRules } from './schedule';
@@ -46,7 +47,7 @@ export async function loadRules(db: Db, organizationId: string): Promise<{ rules
       windowDays: settings.windowDays,
       hours: new Map(hours.map((h) => [h.weekday, { startMinute: h.startMinute, endMinute: h.endMinute }])),
       breaks: breaks.map((b) => ({ weekday: b.weekday, startMinute: b.startMinute, endMinute: b.endMinute })),
-      blocked: blocked.map((b) => ({ startDate: dateFromDb(b.startDate), endDate: dateFromDb(b.endDate) })),
+      blocked: blocked.map((b) => ({ startDate: dateFromDb(b.startDate), endDate: dateFromDb(b.endDate), startMinute: b.startMinute, endMinute: b.endMinute, serviceId: b.serviceId })),
     },
   };
 }
@@ -123,6 +124,7 @@ export class BookingEngine {
           blockedUntil: check.blockedUntil,
           dateOnly: rules.mode === 'date',
           manageNonce: newNonce(),
+          checkInCode: await this.freeCheckInCode(tx, input.organizationId),
           note: input.note || null,
           source: input.source,
         },
@@ -137,12 +139,25 @@ export class BookingEngine {
     return result;
   }
 
+  /** A check-in code no other booking of this business has. */
+  private async freeCheckInCode(tx: Db, organizationId: string) {
+    for (;;) {
+      const code = newCheckInCode();
+      if (!(await tx.booking.findFirst({ where: { organizationId, checkInCode: code }, select: { id: true } }))) return code;
+    }
+  }
+
   async reschedule(organizationId: string, bookingId: number, want: { startsAt?: Date; date?: string }, by: 'customer' | 'business') {
     const result = await this.db.$transaction(async (tx) => {
       await lock(tx, organizationId);
       const booking = await tx.booking.findFirst({ where: { id: bookingId, organizationId }, include: { service: true } });
       if (!booking || booking.status !== 'confirmed') throw new ApiError(404, { error: 'not_found', message: 'That booking is not active any more.' });
-      if (booking.startsAt <= new Date() && !booking.dateOnly) throw new ApiError(409, { error: 'started', message: 'This appointment has already started, so it can no longer be changed.' });
+      // In progress: locked. Over (missed, or at the check-in desk): the business may still move it.
+      const now = new Date();
+      const ended = booking.endsAt <= now;
+      if (booking.startsAt <= now && !booking.dateOnly && !(by === 'business' && ended)) {
+        throw new ApiError(409, { error: 'started', message: 'This appointment has already started, so it can no longer be changed.' });
+      }
       const loaded = await loadRules(tx, organizationId);
       if (!loaded) throw errors.notFound();
       const date = want.date ?? (want.startsAt ? want.startsAt.toISOString().slice(0, 10) : undefined);

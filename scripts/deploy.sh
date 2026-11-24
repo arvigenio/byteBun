@@ -156,9 +156,10 @@ check_database_changes() {
     diff <(printf '%s\n' "$old") <(printf '%s\n' "$new") | grep '^[<>]' | sed 's/^/    /' || true
   fi
 
-  git diff --name-only --diff-filter=DMR "$from" "$to" -- backend/prisma/migrations |
+  # Both databases: the admin/landing one (prisma/) and the clients one (prisma-clients/).
+  git diff --name-only --diff-filter=DMR "$from" "$to" -- backend/prisma/migrations backend/prisma-clients/migrations |
     sed 's/^/- existing migration changed or removed: /'
-  git diff --name-only --diff-filter=A "$from" "$to" -- 'backend/prisma/migrations/*.sql' |
+  git diff --name-only --diff-filter=A "$from" "$to" -- 'backend/prisma/migrations/*.sql' 'backend/prisma-clients/migrations/*.sql' |
     while read -r f; do
       # Process substitution, not a pipe: with pipefail, grep -q stopping early could fail the pipe.
       if git cat-file -e "$to:$(dirname "$f")/deploy-guard-reviewed" 2>/dev/null; then
@@ -169,7 +170,8 @@ check_database_changes() {
     done
 }
 
-# pg_dump of the running database into <dir>, keeping the newest 14 pre-deploy dumps.
+# pg_dump of the running databases into <dir>: the app database (pre-deploy-<date>-*.dump) and,
+# once it exists, the clients database (pre-deploy-clients-*.dump), keeping the newest 14 of each.
 # Restore: docs/DEPLOY-VPS.md, "Restore". Fails (so the deploy stops) if it can't make a
 # readable dump; succeeds without one only when no db container is running yet (first deploy).
 backup_database() {
@@ -193,7 +195,33 @@ backup_database() {
   mv "$file.part" "$file"
   chmod 600 "$file"
   echo "Saved $file ($(du -h "$file" | cut -f1))"
-  ls -1t "$dir"/pre-deploy-*.dump 2>/dev/null | tail -n +15 | xargs -r -d '\n' rm -f --
+  ls -1t "$dir"/pre-deploy-2*.dump 2>/dev/null | tail -n +15 | xargs -r -d '\n' rm -f --
+
+  # The clients database (accounts, bookings), on the same server. Its name is CLIENTS_DB_NAME in
+  # .env (default clients_db); skipped until the app's first start has created it.
+  local clients_db exists
+  clients_db="$(grep -E '^CLIENTS_DB_NAME=' "$app_dir/.env" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\"' \r")"
+  clients_db="${clients_db:-clients_db}"
+  if ! [[ $clients_db =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
+    echo "CLIENTS_DB_NAME in .env is not a valid database name." >&2
+    return 1
+  fi
+  exists="$(compose exec -T -e CDB="$clients_db" db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'$CDB'"'"'"')"
+  if [[ $exists != 1* ]]; then
+    echo "No $clients_db database yet: nothing more to back up."
+    return 0
+  fi
+  file="$dir/pre-deploy-clients-$(date +%F-%H%M%S)-${commit:0:7}.dump"
+  if ! compose exec -T -e CDB="$clients_db" db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$CDB" -Fc' >"$file.part" ||
+    ! compose exec -T db pg_restore --list <"$file.part" >/dev/null; then
+    rm -f "$file.part"
+    echo "pg_dump of $clients_db failed or produced an unreadable file." >&2
+    return 1
+  fi
+  mv "$file.part" "$file"
+  chmod 600 "$file"
+  echo "Saved $file ($(du -h "$file" | cut -f1))"
+  ls -1t "$dir"/pre-deploy-clients-*.dump 2>/dev/null | tail -n +15 | xargs -r -d '\n' rm -f --
 }
 
 # Polls the app container's Docker health status until healthy, unhealthy, or timeout.

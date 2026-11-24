@@ -2,6 +2,7 @@ import { NotFound } from '../pages/NotFound.jsx';
 import { AccountPage } from './AccountPage.jsx';
 import { BookingPageSettings } from './BookingPageSettings.jsx';
 import { BookingsList } from './BookingsList.jsx';
+import { CheckInPage } from './CheckInPage.jsx';
 import { PlanPage } from './PlanPage.jsx';
 import { SchedulePage } from './SchedulePage.jsx';
 import { ServicesPage } from './ServicesPage.jsx';
@@ -13,6 +14,8 @@ export function BookingsApp({ sub }) {
   switch (sub) {
     case '/':
       return <BookingsList />;
+    case '/check-in':
+      return <CheckInPage />;
     case '/services':
       return <ServicesPage />;
     case '/schedule':

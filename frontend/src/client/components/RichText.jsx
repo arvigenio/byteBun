@@ -1,10 +1,23 @@
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect } from 'react';
+import { usePrompt } from '../ui.jsx';
+
+const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** Text saved before the editor existed (no tags) as paragraphs, so its line breaks survive. */
+export const asHtml = (v) =>
+  !v?.trim() || /<[a-z][^>]*>/i.test(v)
+    ? v ?? ''
+    : v
+        .trim()
+        .split(/\n\s*\n/)
+        .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, '<br>')}</p>`)
+        .join('');
 
 // Simple rich text for instructions: bold, italic, lists and clickable links. The API keeps only
 // those tags (sanitize-html), so whatever is pasted, only safe HTML is stored and emailed.
 export function RichText({ value, onChange, placeholder = '', id }) {
+  const prompt = usePrompt();
   const editor = useEditor({
     extensions: [StarterKit.configure({ heading: false, codeBlock: false, code: false, horizontalRule: false, link: { openOnClick: false, autolink: true, defaultProtocol: 'https' } })],
     content: value || '',
@@ -28,9 +41,17 @@ export function RichText({ value, onChange, placeholder = '', id }) {
       {label}
     </button>
   );
-  const link = () => {
+  const link = async () => {
     const prev = editor.getAttributes('link').href ?? '';
-    const href = window.prompt('Link (https://…, mailto:, tel:)', prev);
+    const href = await prompt({
+      title: prev ? 'Edit link' : 'Add a link',
+      label: 'Link address',
+      hint: prev ? 'Leave it empty to remove the link.' : 'A web address, mailto: or tel:. Select some text first to link it.',
+      placeholder: 'https://…',
+      value: prev,
+      action: prev ? 'Save link' : 'Add link',
+      required: false,
+    });
     if (href === null) return;
     if (!href) return editor.chain().focus().unsetLink().run();
     editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
