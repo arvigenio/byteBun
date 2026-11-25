@@ -64,7 +64,7 @@ export async function startApp(): Promise<TestApp> {
 export async function resetClients(db: { $executeRawUnsafe: (sql: string) => Promise<unknown> }) {
   await settle(100);
   await db.$executeRawUnsafe(
-    'TRUNCATE auth.users, auth.sessions, auth.accounts, auth.verifications, auth.rate_limits, auth.organizations, auth.members, auth.invitations, billing.subscriptions, billing.subscription_addons, billing.entitlements, billing.account_status, billing.events, booking.settings, booking.weekly_hours, booking.breaks, booking.blocked_dates, booking.services, booking.customers, booking.bookings, booking.notifications RESTART IDENTITY CASCADE',
+    'TRUNCATE auth.users, auth.sessions, auth.accounts, auth.verifications, auth.rate_limits, auth.organizations, auth.members, auth.invitations, billing.subscriptions, billing.subscription_addons, billing.entitlements, billing.account_status, billing.events, booking.settings, booking.weekly_hours, booking.breaks, booking.blocked_dates, booking.services, booking.customers, booking.bookings, booking.notifications, booking.events, booking.event_tickets, booking.event_vouchers, booking.event_scanners, booking.event_claimables, booking.event_claims RESTART IDENTITY CASCADE',
   );
 }
 

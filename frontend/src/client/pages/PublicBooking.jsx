@@ -2,6 +2,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useBookMutation, usePublicAvailabilityQuery, usePublicPageQuery } from '../api.js';
+import { Scatter } from '../components/Scatter.jsx';
 import { SlotPicker } from '../components/SlotPicker.jsx';
 import { inkOn } from '../lib/color.js';
 import { duration, fmtLongDate, fmtTime, LOCATION_LABEL, todayIn, zoneName } from '../lib/format.js';
@@ -32,10 +33,11 @@ export function BrandFrame({ branding, name, children }) {
     if (name) document.title = `Book with ${name}`;
   }, [name]);
   return (
-    <div style={brandStyle(branding)} className={`min-h-screen bg-canvas text-ink ${FONT_CLASS[branding?.font] ?? ''}`}>
-      <div className="mx-auto max-w-2xl px-4 pt-8 pb-5 mobile:pt-5">{children}</div>
+    <div style={brandStyle(branding)} className={`relative min-h-screen bg-canvas text-ink ${FONT_CLASS[branding?.font] ?? ''}`}>
+      <Scatter />
+      <div className="relative mx-auto max-w-2xl px-4 pt-8 pb-5 mobile:pt-5">{children}</div>
       {branding?.poweredBy && (
-        <footer className="pb-4 text-center text-[11px] text-faint">
+        <footer className="relative pb-4 text-center text-[11px] text-faint">
           Powered by{' '}
           <a href="https://bytebuntech.com" className="font-medium underline" target="_blank" rel="noreferrer">
             Byte Bun Bookings

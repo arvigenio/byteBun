@@ -48,6 +48,8 @@ export interface ClientsConfig {
   bookingsUrl: string;
   /** Client portal (packaged clients), e.g. https://clientportal.bytebuntech.com */
   portalUrl: string;
+  /** Event check-in scanners: {scannerUrl}/{business}/{event}/{scanner id} (no sign-in: an access code). */
+  scannerUrl: string;
   /**
    * Cookie domain shared by the three hosts, e.g. .bytebuntech.com (one sign-in for all).
    * Empty = host-only cookies (local development on *.localhost): each host signs in on its own.
@@ -270,6 +272,7 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const accountsUrl = origin('ACCOUNTS_URL', 'https://accounts.bytebuntech.com', 'http://accounts.localhost:5173');
   const bookingsUrl = origin('BOOKINGS_URL', 'https://bookings.bytebuntech.com', 'http://bookings.localhost:5173');
   const portalUrl = origin('PORTAL_URL', 'https://clientportal.bytebuntech.com', 'http://clientportal.localhost:5173');
+  const scannerUrl = origin('SCANNER_URL', 'https://scanner.bytebuntech.com', 'http://scanner.localhost:5173');
   const cookieDomain = (env.CLIENT_COOKIE_DOMAIN ?? (isProd ? '.bytebuntech.com' : '')).trim();
   if (cookieDomain && !/^\.?[a-z0-9.-]+\.[a-z]{2,}$/i.test(cookieDomain)) problems.push('CLIENT_COOKIE_DOMAIN must look like .bytebuntech.com (or be empty).');
 
@@ -335,7 +338,7 @@ function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         windowMs: int('CHAT_RATE_LIMIT_WINDOW_MINUTES', 15, { min: 1 }) * 60_000,
       },
     },
-    clients: { dbName: clientsDbName, accountsUrl, bookingsUrl, portalUrl, cookieDomain, mailFrom: env.CLIENTS_MAIL_FROM?.trim() || 'Byte Bun Bookings <bookings@bytebuntech.com>',
+    clients: { dbName: clientsDbName, accountsUrl, bookingsUrl, portalUrl, scannerUrl, cookieDomain, mailFrom: env.CLIENTS_MAIL_FROM?.trim() || 'Byte Bun Bookings <bookings@bytebuntech.com>',
       whatsappWebhookUrl,
       whatsappWebhookSecret: env.WHATSAPP_WEBHOOK_SECRET?.trim() || '',
       adminDbUser,

@@ -1,8 +1,10 @@
+import { bookingsBase } from '../lib/surface.js';
 import { NotFound } from '../pages/NotFound.jsx';
 import { AccountPage } from './AccountPage.jsx';
 import { BookingPageSettings } from './BookingPageSettings.jsx';
 import { BookingsList } from './BookingsList.jsx';
-import { CheckInPage } from './CheckInPage.jsx';
+import { DashboardPage } from './DashboardPage.jsx';
+import { EventDetail, EventsPage, EventWizard } from './EventsPages.jsx';
 import { PlanPage } from './PlanPage.jsx';
 import { SchedulePage } from './SchedulePage.jsx';
 import { ServicesPage } from './ServicesPage.jsx';
@@ -15,7 +17,15 @@ export function BookingsApp({ sub }) {
     case '/':
       return <BookingsList />;
     case '/check-in':
-      return <CheckInPage />;
+      // Check-in is a tab of the Bookings page now.
+      window.history.replaceState(null, '', `${bookingsBase}${window.location.search}#check-in`);
+      return <BookingsList />;
+    case '/dashboard':
+      return <DashboardPage />;
+    case '/events':
+      return <EventsPage />;
+    case '/events/new':
+      return <EventWizard />;
     case '/services':
       return <ServicesPage />;
     case '/schedule':
@@ -28,8 +38,11 @@ export function BookingsApp({ sub }) {
       return <PlanPage />;
     case '/account':
       return <AccountPage />;
-    default:
+    default: {
+      const event = /^\/events\/(\d+)$/.exec(sub);
+      if (event) return <EventDetail id={Number(event[1])} />;
       return <NotFound />;
+    }
   }
 }
 

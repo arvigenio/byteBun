@@ -2,10 +2,12 @@
 //   accounts.*      sign-in, invitations, new business
 //   bookings.*      the standalone Bookings app (/app) and public booking pages (/{slug})
 //   clientportal.*  the client portal (Bookings at /bookings)
+//   scanner.*       event check-in scanners: /{business}/{event}/{scanner id} (an access code, no sign-in)
 export function detectSurface(hostname = window.location.hostname) {
   const label = hostname.split('.')[0];
   if (label === 'clientportal') return 'portal';
   if (label === 'accounts') return 'accounts';
+  if (label === 'scanner') return 'scanner';
   return 'bookings';
 }
 
@@ -15,6 +17,7 @@ export const PRODUCT = {
   bookings: { name: 'Byte Bun Bookings', short: 'Bookings' },
   portal: { name: 'Byte Bun Client Portal', short: 'Client Portal' },
   accounts: { name: 'Byte Bun', short: 'Accounts' },
+  scanner: { name: 'Byte Bun Scanner', short: 'Scanner' },
 }[surface];
 
 /** Where the Bookings app lives on this host. */

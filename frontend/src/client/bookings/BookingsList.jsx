@@ -9,6 +9,7 @@ import { bookingSchema } from '../lib/schemas.js';
 import { bookingsBase } from '../lib/surface.js';
 import { Badge, Button, Checkbox, Dialog, Empty, Field, Icon, IconButton, ICONS, Input, LinkButton, Loading, Notice, PageHeader, Select, Spinner, Textarea } from '../ui.jsx';
 import { can } from './BookingsApp.jsx';
+import { CheckInPage } from './CheckInPage.jsx';
 
 const VIEWS = [
   { key: 'upcoming', label: 'Upcoming' },
@@ -21,12 +22,12 @@ const LAYOUTS = [
   { key: 'calendar', label: 'Calendar', icon: ICONS.calendar },
 ];
 
-/** List or calendar, kept in the URL (#calendar) so a reload or a shared link keeps it. */
+/** List, calendar or check-in (the header's Check-in button), kept in the URL (#calendar, #check-in) so a reload or a shared link keeps it. */
 function useLayout() {
-  const [layout, setLayout] = useState(() => (window.location.hash === '#calendar' ? 'calendar' : 'list'));
+  const [layout, setLayout] = useState(() => ['calendar', 'check-in'].find((k) => `#${k}` === window.location.hash) ?? 'list');
   const go = (key) => {
     setLayout(key);
-    window.history.replaceState(null, '', key === 'calendar' ? '#calendar' : window.location.pathname + window.location.search);
+    window.history.replaceState(null, '', key === 'list' ? window.location.pathname + window.location.search : `#${key}`);
   };
   return [layout, go];
 }
@@ -60,6 +61,12 @@ export function BookingsList() {
         description={o ? `${o.upcoming} upcoming · ${o.today} today · times in ${tz.replace(/_/g, ' ')}` : ' '}
         actions={
           <>
+            {can(me, 'bookings.manage') && (
+              <Button variant={layout === 'check-in' ? 'primary' : 'secondary'} aria-pressed={layout === 'check-in'} onClick={() => setLayout(layout === 'check-in' ? 'list' : 'check-in')}>
+                <Icon d={ICONS.qr} className="size-4" />
+                Check-in
+              </Button>
+            )}
             {can(me, 'bookings.settings') && (
               <a href="/api/client/bookings/export.csv" className="inline-flex min-h-10 items-center rounded-btn border border-line-strong bg-surface px-4 text-sm font-semibold hover:bg-sunken">
                 Export CSV
@@ -118,6 +125,8 @@ export function BookingsList() {
 
       {!o ? (
         <Loading />
+      ) : layout === 'check-in' ? (
+        <CheckInPage />
       ) : layout === 'calendar' ? (
         <CalendarView me={me} tz={tz} actions={actions} />
       ) : list.isLoading ? (

@@ -5,22 +5,40 @@ import { authHttp, toError, useAcceptInvitationMutation, useConfigQuery, useInvi
 import { Centered } from '../AppGate.jsx';
 import { detectTimeZone, slugify, timeZones } from '../lib/format.js';
 import { codeSchema, emailSchema, onboardingSchema } from '../lib/schemas.js';
-import { go, landingUrl, safeNext, signInUrl, welcomeUrl } from '../lib/surface.js';
+import { go, landingUrl, safeNext, signInUrl, surface, welcomeUrl } from '../lib/surface.js';
+import { Scatter } from '../components/Scatter.jsx';
 import { Button, Field, Input, Loading, Select } from '../ui.jsx';
+
+/** Which product this sign-in is for (the host): bookings.* is Bookings and Events. */
+const BRAND = {
+  bookings: { name: 'Byte Bun Bookings', tag: 'Bookings & Events', icon: '/client/bookings-icon.svg', signIn: 'Sign in to Bookings & Events', about: 'Manage your appointments, booking page and events.' },
+  portal: { name: 'Byte Bun Client Portal', tag: null, icon: '/client/portal-icon.svg', signIn: 'Sign in to your client portal', about: null },
+  accounts: { name: 'Byte Bun', tag: null, icon: '/client/bookings-icon.svg', signIn: 'Sign in to Byte Bun', about: null },
+}[surface] ?? { name: 'Byte Bun', tag: null, icon: '/client/bookings-icon.svg', signIn: 'Sign in to Byte Bun', about: null };
 
 function AuthCard({ title, subtitle, children }) {
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <img src="/client/bookings-icon.svg" alt="" className="size-9 rounded-lg" />
-          <span className="text-lg font-semibold">Byte Bun</span>
+    <main className="relative grid min-h-screen place-items-center px-4 py-10">
+      <Scatter />
+      <div className="relative w-full max-w-md">
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <img src={BRAND.icon} alt="" className="size-9 rounded-lg" />
+            <span className="text-lg font-semibold">{BRAND.name}</span>
+          </div>
+          {BRAND.tag && <span className="rounded-full bg-brand-soft px-3 py-0.5 text-xs font-semibold tracking-wide text-brand">{BRAND.tag}</span>}
         </div>
         <div className="rounded-card border border-line bg-surface p-7 shadow-sm mobile:p-5">
           <h1 className="text-xl font-semibold">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
           <div className="mt-6">{children}</div>
         </div>
+        <p className="mt-6 text-center text-xs text-faint">
+          Powered by{' '}
+          <a href="https://bytebuntech.com" target="_blank" rel="noreferrer" className="font-semibold text-muted underline-offset-2 hover:text-ink hover:underline">
+            Byte Bun Tech
+          </a>
+        </p>
       </div>
     </main>
   );
@@ -61,7 +79,7 @@ export function SignInPage() {
   };
 
   return (
-    <AuthCard title={email ? 'Check your email' : 'Sign in to Byte Bun'} subtitle={email ? `We sent a 6-digit code to ${email}.` : 'New here? Enter your email and we’ll create your free account.'}>
+    <AuthCard title={email ? 'Check your email' : BRAND.signIn} subtitle={email ? `We sent a 6-digit code to ${email}.` : `${BRAND.about ? `${BRAND.about} ` : ''}New here? Enter your email and we’ll create your free account.`}>
       {email ? <CodeStep email={email} onBack={() => setEmail(null)} onDone={finish} /> : <EmailStep onSent={setEmail} />}
     </AuthCard>
   );

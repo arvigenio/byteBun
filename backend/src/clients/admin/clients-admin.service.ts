@@ -11,6 +11,7 @@ import { ApiError } from '../../common/api-error';
 import { APP_CONFIG, type AppConfig } from '../../config/config';
 import { logger } from '../../logging/logger';
 import { BookingEngine } from '../booking/booking-engine';
+import { newCheckInCode } from '../booking/check-in';
 import { BookingNotifications } from '../booking/notifications';
 import { type ClientsDb } from '../clients-db';
 import { syncEntitlements } from '../entitlements';
@@ -244,6 +245,52 @@ export class ClientsAdminService {
   }
 
   /** Undo a delete during the grace period. The subscription starts again on the same plan. */
+  /** The client's events (seminars, webinars), with registrations and participant limits. */
+  async hostedEvents(id: string) {
+    await this.org(id);
+    const events = await this.db.event.findMany({ where: { organizationId: id }, orderBy: { startsAt: 'desc' }, take: 100 });
+    const counts = await this.db.eventTicket.groupBy({ by: ['eventId'], where: { organizationId: id, status: { in: ['confirmed', 'pending'] } }, _count: { _all: true } });
+    const planCap = (await this.db.entitlement.findUnique({ where: { organizationId_key: { organizationId: id, key: 'limit:events.participants' } } }))?.value ?? null;
+    return events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      kind: e.kind,
+      startsAt: e.startsAt,
+      capacity: e.capacity,
+      participantLimit: e.participantLimit,
+      planLimit: planCap,
+      registered: counts.find((c) => c.eventId === e.id)?._count._all ?? 0,
+    }));
+  }
+
+  /** Vouchers for bigger events (paid by hand), newest first. */
+  async eventVouchers(id: string) {
+    await this.org(id);
+    const rows = await this.db.eventVoucher.findMany({ where: { organizationId: id }, orderBy: { createdAt: 'desc' }, take: 100 });
+    const events = await this.db.event.findMany({ where: { id: { in: rows.map((r) => r.eventId).filter((x): x is number => x !== null) } }, select: { id: true, title: true } });
+    return rows.map((r) => ({ ...r, code: `${r.code.slice(0, 4)}-${r.code.slice(4)}`, event: events.find((e) => e.id === r.eventId) ?? null }));
+  }
+
+  /** After a manual payment: a voucher for one bigger event, to give to the client. */
+  async createEventVoucher(id: string, body: { participants: number; priceLabel: string | null; note: string | null }, actor: AdminActor) {
+    await this.org(id);
+    let code = newCheckInCode();
+    while (await this.db.eventVoucher.findUnique({ where: { code } })) code = newCheckInCode();
+    const v = await this.db.eventVoucher.create({ data: { organizationId: id, code, participants: body.participants, priceLabel: body.priceLabel, note: body.note, createdBy: actor.email } });
+    await this.event(id, 'event_voucher', actor, body.note, { participants: body.participants, priceLabel: body.priceLabel });
+    return { ...v, code: `${code.slice(0, 4)}-${code.slice(4)}` };
+  }
+
+  /** A bigger event was paid for: raise (or reset, null) one event's participant limit. */
+  async setEventLimit(id: string, eventId: number, body: { participantLimit: number | null; reason: string | null }, actor: AdminActor) {
+    await this.org(id);
+    const e = await this.db.event.findFirst({ where: { id: eventId, organizationId: id } });
+    if (!e) throw notFound();
+    await this.db.event.update({ where: { id: eventId }, data: { participantLimit: body.participantLimit } });
+    await this.event(id, 'event_limit', actor, body.reason, { eventId, title: e.title, from: e.participantLimit, to: body.participantLimit });
+    return { ok: true };
+  }
+
   async restore(id: string, body: { reason: string | null }, actor: AdminActor) {
     const { status, statusRow } = await this.org(id);
     if (status !== 'deleted' || !statusRow?.deleteAfter || statusRow.deleteAfter <= new Date()) throw new ApiError(409, { error: 'not_restorable', message: 'Only a deleted client within its 30 days can be restored.' });

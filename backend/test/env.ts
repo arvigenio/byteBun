@@ -11,6 +11,7 @@ process.env.CLIENTS_DATABASE_URL = '';
 process.env.ACCOUNTS_URL = 'http://accounts.localhost:5173';
 process.env.BOOKINGS_URL = 'http://bookings.localhost:5173';
 process.env.PORTAL_URL = 'http://clientportal.localhost:5173';
+process.env.SCANNER_URL = 'http://scanner.localhost:5173';
 process.env.CLIENT_COOKIE_DOMAIN = '';
 // WhatsApp: in tests messages land in whatsappOutbox (notifications.ts), never on the network.
 process.env.WHATSAPP_WEBHOOK_URL = 'http://n8n.test/whatsapp';

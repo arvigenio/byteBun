@@ -11,7 +11,11 @@
 //   POST /api/admin/clients/:id/reactivate  { reason, notifyOwner }
 //   POST /api/admin/clients/:id/delete      { confirmName, reason, notifyCustomers, notifyOwner }  owner-level admins
 //   POST /api/admin/clients/:id/restore     { reason }
-import { Body, Controller, Get, Header, HttpCode, Inject, Param, Post, Query, Req, Res } from '@nestjs/common';
+//   GET  /api/admin/clients/:id/hosted-events                 the client's events (seminars, webinars)
+//   POST /api/admin/clients/:id/hosted-events/:eventId/limit  { participantLimit, reason }  a bigger event was paid for
+//   GET  /api/admin/clients/:id/event-vouchers
+//   POST /api/admin/clients/:id/event-vouchers  { participants, priceLabel, note }  after a manual payment
+import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseIntPipe, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as yup from 'yup';
 import { YupValidationPipe } from '../../common/yup-validation.pipe';
@@ -32,6 +36,12 @@ const deactivateSchema = yup.object({ reason: requiredReason(), notifyOwner: yup
 const reactivateSchema = yup.object({ reason: optionalReason(), notifyOwner: yup.boolean().default(true) });
 const deleteSchema = yup.object({ confirmName: yup.string().trim().max(200).required('Type the business name.'), reason: requiredReason(), notifyCustomers: yup.boolean().default(false), notifyOwner: yup.boolean().default(true) });
 const restoreSchema = yup.object({ reason: optionalReason() });
+const voucherSchema = yup.object({
+  participants: yup.number().integer().min(51, 'More than 50.').max(1000000).required('How many participants?'),
+  priceLabel: yup.string().trim().max(60).nullable().transform((v) => (v === '' ? null : v)),
+  note: optionalReason(),
+});
+const eventLimitSchema = yup.object({ participantLimit: yup.number().integer().min(1).max(1000000).nullable().default(null), reason: optionalReason() });
 
 const actor = (req: Request) => ({ email: req.admin!.user.email });
 
@@ -91,6 +101,27 @@ export class ClientsAdminController {
   @HttpCode(200)
   remove(@Req() req: Request, @Param('id') id: string, @Body(new YupValidationPipe(deleteSchema)) body: yup.InferType<typeof deleteSchema>) {
     return this.clients.remove(id, body, actor(req));
+  }
+
+  @Get(':id/event-vouchers')
+  eventVouchers(@Param('id') id: string) {
+    return this.clients.eventVouchers(id);
+  }
+
+  @Post(':id/event-vouchers')
+  createVoucher(@Req() req: Request, @Param('id') id: string, @Body(new YupValidationPipe(voucherSchema)) body: yup.InferType<typeof voucherSchema>) {
+    return this.clients.createEventVoucher(id, { participants: body.participants, priceLabel: body.priceLabel ?? null, note: body.note ?? null }, actor(req));
+  }
+
+  @Get(':id/hosted-events')
+  hostedEvents(@Param('id') id: string) {
+    return this.clients.hostedEvents(id);
+  }
+
+  @Post(':id/hosted-events/:eventId/limit')
+  @HttpCode(200)
+  eventLimit(@Req() req: Request, @Param('id') id: string, @Param('eventId', ParseIntPipe) eventId: number, @Body(new YupValidationPipe(eventLimitSchema)) body: yup.InferType<typeof eventLimitSchema>) {
+    return this.clients.setEventLimit(id, eventId, { participantLimit: body.participantLimit ?? null, reason: body.reason ?? null }, actor(req));
   }
 
   @Post(':id/restore')

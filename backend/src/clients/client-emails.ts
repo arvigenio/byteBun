@@ -8,6 +8,7 @@ import sanitizeHtml from 'sanitize-html';
 import { escapeHtml as e } from '../auth/email-template';
 import type { Mail, MailAttachment } from '../auth/mailer';
 import type { AppConfig } from '../config/config';
+import { formatLocalDate } from './booking/time';
 
 const FONT = "'Segoe UI', Helvetica, Arial, sans-serif";
 const PRODUCT = { name: 'Byte Bun Bookings', color: '#0F766E' };
@@ -468,6 +469,276 @@ const icsDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{
 const icsDay = (date: string) => date.replace(/-/g, '');
 const icsEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const nextDay = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+
+// ---- Event emails (seminars, webinars: booking/events.ts) ----
+
+export interface EventView {
+  brand: Brand;
+  attendeeName: string;
+  attendeeEmail: string;
+  title: string;
+  /** "Thursday, December 3, 2026, 2:00 PM – 5:00 PM (PST)" */
+  when: string;
+  dateLabel: string;
+  format: 'onsite' | 'online';
+  address: string | null;
+  /** Onsite: the exact map pin, for directions. */
+  pin: { lat: number; lng: number } | null;
+  /** Online: may come later. */
+  meetingUrl: string | null;
+  pageUrl: string;
+  calendar: { google: string; outlook: string; ics: string };
+  /** Onsite events: the QR code and code for the entrance. Online events: none (just the link). */
+  checkIn: { code: string; qrPng: Buffer } | null;
+  /** Free events: the attendee's private link to cancel (paid events can't be cancelled). */
+  cancelUrl: string | null;
+}
+
+function eventDetails(v: EventView): [string, string][] {
+  return [
+    ['Event', v.title],
+    ['When', v.when],
+    v.format === 'online' ? ['Where', v.meetingUrl ? 'Online (link below)' : 'Online: we’ll email you the link'] : ['Where', v.address || v.brand.businessName],
+  ];
+}
+
+function eventButtons(v: EventView, calendar: boolean): Button[] {
+  return [
+    ...(v.format === 'online' && v.meetingUrl ? [{ label: 'Join online', href: v.meetingUrl, primary: true }] : []),
+    ...(v.format === 'onsite' && (v.pin || v.address) ? [{ label: 'Open in Google Maps', href: v.pin ? `https://www.google.com/maps/search/?api=1&query=${v.pin.lat},${v.pin.lng}` : mapsUrl(v.address!) }] : []),
+    ...(calendar ? [{ label: 'Google Calendar', href: v.calendar.google }, { label: 'Outlook', href: v.calendar.outlook }] : []),
+    { label: 'Event page', href: v.pageUrl },
+  ];
+}
+
+function eventMail(cfg: AppConfig, v: EventView, subject: string, c: Omit<Content, 'brandName' | 'color' | 'footer'>, extras: { qr: boolean; ics: boolean }): Mail {
+  const qr = extras.qr && v.checkIn ? v.checkIn : null;
+  const { html, text } = render({ ...c, ...(qr ? { checkIn: { code: qr.code } } : {}), brandName: v.brand.businessName, color: v.brand.primaryColor, footer: brandFooter(v.brand) });
+  const attachments: MailAttachment[] = [
+    ...(extras.ics ? [{ filename: 'event.ics', content: v.calendar.ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] : []),
+    ...(qr ? [{ filename: 'check-in.png', content: qr.qrPng, contentType: 'image/png', cid: 'checkin-qr' }] : []),
+  ];
+  return { to: v.attendeeEmail, names: { [v.attendeeEmail]: v.attendeeName }, subject, text, html, from: fromFor(cfg, v.brand.businessName), replyTo: v.brand.replyTo ?? undefined, attachments: attachments.length ? attachments : undefined };
+}
+
+export function eventConfirmationMail(cfg: AppConfig, v: EventView): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `You're registered: ${v.title}, ${v.dateLabel}`,
+    {
+      preheader: `${v.title} · ${v.when}`,
+      title: "You're registered!",
+      intro: [`Hi ${v.attendeeName}, your place at ${v.title} with ${v.brand.businessName} is confirmed.`],
+      details: eventDetails(v),
+      buttons: [...eventButtons(v, true), ...(v.cancelUrl ? [{ label: 'Cancel my registration', href: v.cancelUrl }] : [])],
+      note: [
+        v.format === 'online' && !v.meetingUrl ? 'We’ll email you the link to join before the event.' : null,
+        v.cancelUrl ? 'Can’t come? Please cancel, so someone else can have your place.' : null,
+        v.brand.phone ? `Questions? Call ${v.brand.phone}.` : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || undefined,
+    },
+    { qr: true, ics: true },
+  );
+}
+
+export function eventLinkMail(cfg: AppConfig, v: EventView, changed: boolean): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `${changed ? 'New link' : 'Your link'} to join: ${v.title}`,
+    {
+      preheader: `Join ${v.title} online`,
+      title: changed ? 'The link to join has changed' : 'Here’s your link to join',
+      intro: [changed ? `Hi ${v.attendeeName}, ${v.brand.businessName} changed the link for ${v.title}. Please use this one.` : `Hi ${v.attendeeName}, here is the link to join ${v.title} online.`],
+      details: [...eventDetails(v), ['Link', v.meetingUrl ?? '']],
+      buttons: eventButtons(v, false),
+    },
+    { qr: true, ics: false },
+  );
+}
+
+/** Sent when the attendee is checked in at the event (scanned, typed code, or by hand). */
+export function eventCheckedInMail(cfg: AppConfig, v: EventView, checkedInAt: string): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `You're checked in: ${v.title}`,
+    {
+      preheader: `Checked in at ${checkedInAt}`,
+      title: "You're checked in!",
+      intro: [`Hi ${v.attendeeName}, welcome to ${v.title}. You were checked in at ${checkedInAt}.`, 'Enjoy the event!'],
+      details: [['Event', v.title], ['When', v.when], ['Checked in', checkedInAt]],
+      buttons: v.format === 'online' && v.meetingUrl ? [{ label: 'Join online', href: v.meetingUrl, primary: true }] : [],
+      note: `If this wasn't you, please tell ${v.brand.businessName}${v.brand.phone ? ` (${v.brand.phone})` : ''}.`,
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** The attendee cancelled their own registration (free events). */
+export function eventCancelledMail(cfg: AppConfig, v: EventView): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `Registration cancelled: ${v.title}`,
+    {
+      preheader: `You cancelled your registration for ${v.title}`,
+      title: 'Your registration is cancelled',
+      intro: [`Hi ${v.attendeeName}, you cancelled your registration for ${v.title} with ${v.brand.businessName}. Your QR code no longer works.`, 'Changed your mind? You can register again on the event page while places are left.'],
+      details: [['Event', v.title], ['When', v.when]],
+      buttons: [{ label: 'Event page', href: v.pageUrl }],
+    },
+    { qr: false, ics: false },
+  );
+}
+
+export function eventRevokedMail(cfg: AppConfig, v: EventView, reason: string | null): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `Registration cancelled: ${v.title}`,
+    {
+      preheader: `Your registration for ${v.title} was cancelled`,
+      title: 'Your registration was cancelled',
+      intro: [`Hi ${v.attendeeName}, ${v.brand.businessName} cancelled your registration for ${v.title}.`, ...(reason ? [`Reason: ${reason}`] : [])],
+      details: [['Event', v.title], ['When', v.when]],
+      note: v.brand.phone ? `Questions? Call ${v.brand.phone}.` : 'If you have questions, reply to this email.',
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** The code that confirms deleting an event (to the person who asked). */
+export function eventDeleteCodeMail(cfg: AppConfig, d: { to: string; name: string; businessName: string; eventTitle: string; code: string; minutes: number; registrations: number }): Mail {
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `Your code to delete ${d.eventTitle}: ${d.code}`,
+    title: 'Confirm deleting the event',
+    intro: [
+      `Hi ${d.name}, someone signed in as you asked to delete “${d.eventTitle}” (${d.businessName}).`,
+      d.registrations ? `It has ${d.registrations} registration${d.registrations === 1 ? '' : 's'}. Deleting it removes them, its scanners and claimables, and can’t be undone.` : 'Deleting it can’t be undone.',
+      'Enter this code in the confirmation window:',
+    ],
+    code: d.code,
+    note: `It expires in ${d.minutes} minutes. If you didn’t ask for this, ignore this email: nothing is deleted without the code.`,
+    footer: productFooter,
+  });
+  return { to: d.to, names: { [d.to]: d.name }, subject: `Code to delete “${d.eventTitle}”: ${d.code}`, text, html, from: cfg.clients.mailFrom };
+}
+
+/** The business deleted (cancelled) an event someone was registered for. */
+export function eventCancelledByBusinessMail(cfg: AppConfig, v: EventView): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `Event cancelled: ${v.title}`,
+    {
+      preheader: `${v.title} on ${v.dateLabel} is cancelled`,
+      title: 'This event is cancelled',
+      intro: [`Hi ${v.attendeeName}, ${v.brand.businessName} cancelled ${v.title}. Your registration and QR code no longer work.`, 'Sorry for the change of plans.'],
+      details: [['Event', v.title], ['Was', v.when]],
+      note: v.brand.phone ? `Questions? Call ${v.brand.phone}.` : 'If you have questions, reply to this email.',
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** The event will be deleted soon (events without a voucher: 3 months after they end). */
+export function eventRetentionReminderMail(cfg: AppConfig, d: { to: string; businessName: string; eventTitle: string; deleteOn: string; daysLeft: number; eventUrl: string }): Mail {
+  const when = d.daysLeft <= 1 ? 'tomorrow' : `in ${d.daysLeft} days`;
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `“${d.eventTitle}” is deleted ${when}`,
+    title: `“${d.eventTitle}” is deleted ${when}`,
+    intro: [
+      `${d.businessName}’s event “${d.eventTitle}” will be deleted automatically on ${formatLocalDate(d.deleteOn)}, 3 months after it ended, as agreed when it was created.`,
+      'On that day we’ll email you the complete event (registrations, check-ins, claims and scanners) as CSV and JSON files. You can also export it yourself now.',
+    ],
+    buttons: [{ label: 'Open the event', href: d.eventUrl, primary: true }],
+    note: 'Want to keep it longer? Contact Byte Bun about a bigger-event voucher before it’s deleted.',
+    footer: productFooter,
+  });
+  return { to: d.to, subject: `Reminder: “${d.eventTitle}” is deleted ${when}`, text, html, from: cfg.clients.mailFrom };
+}
+
+/** The event was deleted: the complete event attached (CSV + JSON). */
+export function eventArchivedMail(cfg: AppConfig, d: { to: string; businessName: string; eventTitle: string; file: string; csv: string; json: string; registrations: number }): Mail {
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `“${d.eventTitle}” was deleted. Its data is attached.`,
+    title: `“${d.eventTitle}” was deleted`,
+    intro: [
+      `As agreed when it was created, ${d.businessName}’s event “${d.eventTitle}” was deleted 3 months after it ended.`,
+      `Attached is the complete event: ${d.registrations} registration${d.registrations === 1 ? '' : 's'} with check-ins and claims (CSV, opens in Excel), and everything in JSON (registrations, claims, scanners and the event’s details).`,
+    ],
+    note: 'Keep these files: the event can’t be restored.',
+    footer: productFooter,
+  });
+  return {
+    to: d.to,
+    subject: `Event deleted: “${d.eventTitle}” (data attached)`,
+    text,
+    html,
+    from: cfg.clients.mailFrom,
+    attachments: [
+      { filename: `${d.file}.csv`, content: d.csv, contentType: 'text/csv; charset=utf-8' },
+      { filename: `${d.file}.json`, content: d.json, contentType: 'application/json; charset=utf-8' },
+    ],
+  };
+}
+
+// ---- Event scanner emails (booking/event-scanners.ts) ----
+
+export interface ScannerAccessView {
+  brand: Brand;
+  name: string;
+  email: string;
+  role: string;
+  eventTitle: string;
+  /** "Thursday, December 3, 2026, 2:00 PM (PST)" */
+  when: string;
+  /** The scanner site, where they sign in with both codes. */
+  siteUrl: string;
+  /** Their own link: only the access code to enter. */
+  linkUrl: string;
+  scannerCode: string;
+  accessCode: string;
+  /** A replacement access code (the old one no longer works). */
+  replaced: boolean;
+}
+
+/** The scanner's codes: sent when the scanner is made, and when it gets a new access code. */
+export function scannerAccessMail(cfg: AppConfig, v: ScannerAccessView): Mail {
+  const { html, text } = render({
+    brandName: v.brand.businessName,
+    color: v.brand.primaryColor,
+    preheader: `Your event scanner codes for ${v.eventTitle}`,
+    title: v.replaced ? 'Your new scanner access code' : 'You’re an event scanner',
+    intro: [
+      v.replaced
+        ? `Hi ${v.name}, ${v.brand.businessName} gave you a new access code for scanning ${v.eventTitle}. Your old code no longer works.`
+        : `Hi ${v.name}, ${v.brand.businessName} added you as an event scanner (${v.role}) for ${v.eventTitle}. You’ll check in attendees by scanning the QR codes in their emails.`,
+      'Open the link below on the phone or tablet you’ll scan with, and enter your access code. It works on one device only, so keep it to yourself.',
+    ],
+    details: [
+      ['Event', v.eventTitle],
+      ['When', v.when],
+      ['Role', v.role],
+      ['Scanner code', v.scannerCode],
+      ['Access code', v.accessCode],
+    ],
+    buttons: [{ label: 'Open the scanner', href: v.linkUrl, primary: true }],
+    note: `Or go to ${v.siteUrl.replace(/^https?:\/\//, '')} and enter both codes. Questions? Contact ${v.brand.businessName}${v.brand.phone ? ` (${v.brand.phone})` : ''}.`,
+    footer: v.brand.poweredBy ? `${v.brand.businessName} · Powered by Byte Bun Bookings` : v.brand.businessName,
+  });
+  return { to: v.email, names: { [v.email]: v.name }, subject: v.replaced ? `New scanner access code: ${v.eventTitle}` : `Your event scanner codes: ${v.eventTitle}`, text, html, from: fromFor(cfg, v.brand.businessName), replyTo: v.brand.replyTo ?? undefined };
+}
 
 export interface CalendarEvent {
   uid: string;

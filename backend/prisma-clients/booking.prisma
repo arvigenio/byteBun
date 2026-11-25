@@ -210,3 +210,201 @@ model Notification {
   @@map("notifications")
   @@schema("booking")
 }
+
+// Events: one-time seminars, webinars, classes, on a public page (/{business}/e/{slug}).
+// free: anyone registers on the page. paid: there is no payment gateway yet, so the business takes
+// the payment itself, enters the attendee and gives them a code; the attendee registers with it.
+// No rescheduling or cancelling by attendees; the business can revoke free registrations.
+model Event {
+  id             Int           @id @default(autoincrement())
+  organizationId String        @map("organization_id")
+  slug           String        @db.VarChar(80)
+  title          String        @db.VarChar(160)
+  /// Rich text (sanitized like instructions).
+  description    String?       @db.VarChar(20000)
+  /// free | paid
+  kind           String        @default("free") @db.VarChar(8)
+  /// Shown on the page for paid events, e.g. "₱1,500" (no payment is taken here).
+  priceLabel     String?       @map("price_label") @db.VarChar(60)
+  startsAt       DateTime      @map("starts_at") @db.Timestamptz(3)
+  endsAt         DateTime      @map("ends_at") @db.Timestamptz(3)
+  /// The event's time zone (IANA, e.g. Asia/Manila); null = the business's.
+  timeZone       String?       @map("time_zone") @db.VarChar(64)
+  /// onsite | online
+  format         String        @default("onsite") @db.VarChar(8)
+  address        String?       @db.VarChar(300)
+  /// Onsite, optional: floor, unit, landmarks, or a place the map search can't find.
+  addressDetails String?       @map("address_details") @db.VarChar(300)
+  /// Onsite: the exact map pin (both or neither).
+  latitude       Float?
+  longitude      Float?
+  /// Online: may come later; attendees are emailed when it is added or changed.
+  meetingUrl     String?       @map("meeting_url") @db.VarChar(500)
+  /// Places (confirmed registrations and unused paid codes); null = no limit.
+  capacity       Int?
+  /// Set by Byte Bun when a bigger event is bought (free plan: 50 included; 51-300 $10, up to
+  /// 500 $20, more: custom). Null = the plan's limit (limit:events.participants).
+  participantLimit Int?    @map("participant_limit")
+  /// Open for registration (and the page is public).
+  published      Boolean       @default(false)
+  /// The registration button's text (default: "Register for free" / "Confirm my place").
+  registerLabel  String?       @map("register_label") @db.VarChar(40)
+  /// Deleting the event: SHA-256 of the 6-digit code emailed to the person asking, until when,
+  /// who asked, and wrong tries so far (5 at most).
+  deleteCodeHash      String?   @map("delete_code_hash") @db.Char(64)
+  deleteCodeExpiresAt DateTime? @map("delete_code_expires_at") @db.Timestamptz(3)
+  deleteCodeUserId    String?   @map("delete_code_user_id")
+  deleteCodeAttempts  Int       @default(0) @map("delete_code_attempts")
+  /// Events without a voucher (50 participants or fewer) are deleted 3 months after they end:
+  /// when the business agreed to that, and which reminders (days before: 7, 3, 1) were sent.
+  retentionAgreedAt   DateTime? @map("retention_agreed_at") @db.Timestamptz(3)
+  retentionNotices    Int[]     @default([]) @map("retention_notices")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tickets        EventTicket[]
+  scanners       EventScanner[]
+  claimables     EventClaimable[]
+  vouchers       EventVoucher[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, startsAt])
+  @@map("events")
+  @@schema("booking")
+}
+
+// One registration. Its code (8 characters, no look-alikes) is the paid event's "ticket" and the
+// attendance code in the QR code; codes are unique per business across bookings and events.
+model EventTicket {
+  id             Int       @id @default(autoincrement())
+  eventId        Int       @map("event_id")
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId String    @map("organization_id")
+  name           String    @db.VarChar(120)
+  email          String    @db.VarChar(254)
+  phone          String?   @db.VarChar(40)
+  code           String    @db.Char(8)
+  /// pending (paid: code given, not used yet) | confirmed | revoked (by the business) | cancelled (by the attendee, free events)
+  status         String    @default("confirmed") @db.VarChar(10)
+  /// Behind the attendee's private cancel link (free events): /{business}/e/{event}#cancel={id}.{nonce}
+  manageNonce    String    @default(dbgenerated("md5((random())::text || (clock_timestamp())::text)")) @map("manage_nonce") @db.Char(32)
+  cancelledAt    DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  /// public (registered on the page) | business (code issued by the business)
+  source         String    @default("public") @db.VarChar(10)
+  confirmedAt    DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokeReason   String?   @map("revoke_reason") @db.VarChar(500)
+  checkedInAt    DateTime? @map("checked_in_at") @db.Timestamptz(3)
+  checkedInBy    String?   @map("checked_in_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  claims         EventClaim[]
+
+  @@unique([organizationId, code])
+  @@index([eventId, status])
+  @@map("event_tickets")
+  @@schema("booking")
+}
+
+// A bigger event, paid for by hand: Byte Bun creates a voucher on the admin site (8 characters,
+// for one business) and gives it to the client, who enters it when making (or growing) an
+// event. It sets that event's participant limit; it works once.
+model EventVoucher {
+  id             Int       @id @default(autoincrement())
+  organizationId String    @map("organization_id")
+  code           String    @unique @db.Char(8)
+  /// The most participants the event may then have (e.g. 300 for $10, 500 for $20, or custom).
+  participants   Int
+  priceLabel     String?   @map("price_label") @db.VarChar(60)
+  note           String?   @db.VarChar(500)
+  createdBy      String    @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  usedAt         DateTime? @map("used_at") @db.Timestamptz(3)
+  /// The event it was used on; cleared if that event is deleted (the voucher stays as a record).
+  eventId        Int?      @map("event_id")
+  event          Event?    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([eventId])
+  @@map("event_vouchers")
+  @@schema("booking")
+}
+
+// An attendance scanner for one free event: a person (first and last name, role "Attendance"),
+// a scanner code (in the link scanner host /{business}/{event}/{scannerCode}) and an access code.
+// The first device to sign in with both gets a session; nobody else can. Revoking the access
+// code (codeHash null), making a new one, or deleting the scanner signs that device out.
+// limit:events.scanners: 2 per event on every plan.
+model EventScanner {
+  id             Int       @id @default(autoincrement())
+  eventId        Int       @map("event_id")
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId String    @map("organization_id")
+  publicId       String    @unique @map("public_id") @db.Uuid
+  /// The scanner's ID, in its link and typed on the scanner site (8 characters, unique).
+  scannerCode    String    @unique @map("scanner_code") @db.Char(8)
+  firstName      String    @default("") @map("first_name") @db.VarChar(60)
+  lastName       String    @default("") @map("last_name") @db.VarChar(60)
+  role           String    @default("Attendance") @db.VarChar(40)
+  /// Where the scanner code and access code are emailed.
+  email          String    @default("") @db.VarChar(254)
+  /// Set: this scanner scans claims for that item (e.g. Free Water); null: attendance.
+  claimableId    Int?      @map("claimable_id")
+  claimable      EventClaimable? @relation(fields: [claimableId], references: [id], onDelete: Cascade)
+  /// Old name field (before first/last name); unused.
+  label          String?   @db.VarChar(60)
+  /// SHA-256 of the access code (unique); null = revoked (a new one must be made).
+  codeHash       String?   @unique @map("code_hash") @db.Char(64)
+  /// The access code encrypted (AES-256-GCM, iv.tag.data base64url), shown to the business.
+  accessCodeEnc  String?   @map("access_code_enc") @db.VarChar(120)
+  codeCreatedAt  DateTime? @map("code_created_at") @db.Timestamptz(3)
+  /// When a device entered the code (then the code can't be used again).
+  redeemedAt     DateTime? @map("redeemed_at") @db.Timestamptz(3)
+  /// SHA-256 of that device's session token.
+  sessionHash    String?   @map("session_hash") @db.Char(64)
+  lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  claims         EventClaim[]
+
+  @@index([eventId])
+  @@map("event_scanners")
+  @@schema("booking")
+}
+
+// Something attendees can claim at a free event (e.g. "Free Water", "Snack"), with its own
+// scanners. Limit per event: limit:events.claimables.
+model EventClaimable {
+  id             Int            @id @default(autoincrement())
+  eventId        Int            @map("event_id")
+  event          Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId String         @map("organization_id")
+  name           String         @db.VarChar(60)
+  position       Int            @default(0)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  scanners       EventScanner[]
+  claims         EventClaim[]
+
+  @@index([eventId])
+  @@map("event_claimables")
+  @@schema("booking")
+}
+
+// One attendee claimed one item (once each).
+model EventClaim {
+  id             Int            @id @default(autoincrement())
+  claimableId    Int            @map("claimable_id")
+  claimable      EventClaimable @relation(fields: [claimableId], references: [id], onDelete: Cascade)
+  ticketId       Int            @map("ticket_id")
+  ticket         EventTicket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  organizationId String         @map("organization_id")
+  /// Cleared if the scanner is deleted (claimedBy keeps the name).
+  scannerId      Int?           @map("scanner_id")
+  scanner        EventScanner?  @relation(fields: [scannerId], references: [id], onDelete: SetNull)
+  /// "Mara Santos (Free Water)" or the staff member's name.
+  claimedBy      String?        @map("claimed_by") @db.VarChar(200)
+  claimedAt      DateTime       @default(now()) @map("claimed_at") @db.Timestamptz(3)
+
+  @@unique([claimableId, ticketId])
+  @@index([ticketId])
+  @@index([scannerId])
+  @@map("event_claims")
+  @@schema("booking")
+}

@@ -59,8 +59,9 @@ async function signOut() {
 }
 
 const BOOKINGS_NAV = [
+  { href: '/dashboard', label: 'Dashboard', icon: ICONS.grid },
   { href: '', label: 'Bookings', icon: ICONS.calendar },
-  { href: '/check-in', label: 'Check-in', icon: ICONS.qr },
+  { href: '/events', label: 'Events', icon: ICONS.star },
   { href: '/services', label: 'Services', icon: ICONS.tag },
   { href: '/schedule', label: 'Schedule', icon: ICONS.clock },
   { href: '/page', label: 'Booking page', icon: ICONS.palette },

@@ -4,11 +4,11 @@ import { useAddBookingMutation, useAdminAvailabilityQuery, useBookingsQuery, use
 import { SlotPicker } from '../components/SlotPicker.jsx';
 import { fmtLongDate, fmtTime, todayIn } from '../lib/format.js';
 import { bookingsBase } from '../lib/surface.js';
-import { Badge, Button, Dialog, Icon, ICONS, Input, LinkButton, Loading, Notice, PageHeader, Spinner } from '../ui.jsx';
+import { Badge, Button, Dialog, Icon, ICONS, Input, Loading, Notice, Spinner } from '../ui.jsx';
 
 // Attendance check-in. The customer's emails (and manage page) have a QR code and an 8-character
 // code. Two pages:
-//   /check-in  the front-desk hub (in the app): open the scanner, type a code, today's attendance
+//   Bookings > Check-in tab (#check-in)  the front-desk hub: open the scanner, type a code, today's attendance
 //   /scan      the dedicated full-screen scanner (no app menu), for a phone or tablet at the desk;
 //              the QR code links here (?code=…), so a phone's own camera app opens it too
 // Today's bookings are checked in straight away. Another day's, a past or a cancelled booking shows
@@ -86,6 +86,7 @@ function CodeForm({ onSubmit, loading, dark = false, autoFocus = false }) {
 
 // ---- The hub (in the app) ----
 
+/** The Check-in tab of the Bookings page (BookingsList.jsx, #check-in). */
 export function CheckInPage() {
   const overview = useOverviewQuery();
   const tz = overview.data?.timeZone;
@@ -95,15 +96,6 @@ export function CheckInPage() {
   if (!tz) return <Loading />;
   return (
     <>
-      <PageHeader
-        title="Check-in"
-        description="Mark customers as attended: scan the QR code in their email, or type their 8-character code."
-        actions={
-          <LinkButton href={`${bookingsBase}/scan`} variant="primary">
-            <Icon d={ICONS.qr} className="size-4" /> Open scanner
-          </LinkButton>
-        }
-      />
       <div className="grid gap-5 desktop:grid-cols-2 desktop:items-start">
         <div className="flex flex-col gap-4">
           <a href={`${bookingsBase}/scan`} className="group flex items-center gap-4 rounded-card border border-line bg-surface p-4 transition hover:border-brand hover:shadow-md">
@@ -198,7 +190,7 @@ export function ScanPage() {
   return (
     <div className="fixed inset-0 flex flex-col bg-[#0b0d12] text-white">
       <header className="relative z-10 flex items-center gap-3 px-4 py-3">
-        <a href={`${bookingsBase}/check-in`} className="grid size-10 place-items-center rounded-full bg-white/10 hover:bg-white/20" aria-label="Close the scanner">
+        <a href={`${bookingsBase}#check-in`} className="grid size-10 place-items-center rounded-full bg-white/10 hover:bg-white/20" aria-label="Close the scanner">
           <Icon d="M6 6l12 12M18 6L6 18" className="size-5" />
         </a>
         <div className="min-w-0 flex-1 text-center">
@@ -242,7 +234,7 @@ export function ScanPage() {
 }
 
 /** The camera: BarcodeDetector where the browser has it (Chrome, Android), else jsQR on frames. */
-function Scanner({ paused, onCode, autoStart = false }) {
+export function Scanner({ paused, onCode, autoStart = false }) {
   const video = useRef(null);
   const canvas = useRef(null);
   const stream = useRef(null);
@@ -518,7 +510,7 @@ const TONES = {
   danger: { box: 'border-danger/30 bg-danger-soft', icon: 'bg-danger text-white', title: 'text-danger' },
 };
 
-function ResultCard({ tone, icon, title, children, onNext }) {
+export function ResultCard({ tone, icon, title, children, onNext }) {
   const t = TONES[tone];
   return (
     <section className={`flex flex-col gap-3 rounded-card border p-4 motion-safe:animate-rise ${t.box}`} role={tone === 'danger' || tone === 'warn' ? 'alert' : 'status'}>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ClientEventsPanel } from './ClientEventsPanel.jsx';
 import { clientExportUrl, useCatalogQuery, useClientActionMutation, useClientQuery, useClientsQuery, useEventsQuery } from './clientsApi.js';
 import { PageTitle } from './AdminLayout.jsx';
 import { Dialog } from './dialogs.jsx';
@@ -255,6 +256,7 @@ function ClientDetail({ id, onBack }) {
             ))}
           </ul>
         </Panel>
+        {c.status !== 'deleted' && <ClientEventsPanel clientId={id} />}
         <Panel className="desktop:col-span-2">
           <h2 className="mb-1 text-lg font-bold text-midnight-plum">Audit log</h2>
           <EventList events={c.events} />

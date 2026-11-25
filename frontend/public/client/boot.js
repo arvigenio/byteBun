@@ -5,11 +5,12 @@
 //   accounts.*      Byte Bun Accounts
 (function () {
   var label = location.hostname.split('.')[0];
-  var surface = label === 'clientportal' ? 'portal' : label === 'accounts' ? 'accounts' : 'bookings';
+  var surface = label === 'clientportal' ? 'portal' : label === 'accounts' ? 'accounts' : label === 'scanner' ? 'scanner' : 'bookings';
   var product = {
     bookings: { name: 'Byte Bun Bookings', color: '#0F766E', icon: '/client/bookings-icon.svg', manifest: '/client/bookings.webmanifest' },
     portal: { name: 'Byte Bun Client Portal', color: '#331165', icon: '/client/portal-icon.svg', manifest: '/client/portal.webmanifest' },
     accounts: { name: 'Byte Bun Accounts', color: '#0F766E', icon: '/client/bookings-icon.svg', manifest: null },
+    scanner: { name: 'Byte Bun Scanner', color: '#0b0d12', icon: '/client/bookings-icon.svg', manifest: null },
   }[surface];
   document.documentElement.dataset.surface = surface;
   document.title = product.name;

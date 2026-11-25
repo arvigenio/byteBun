@@ -14,6 +14,10 @@ import { BookingAdminController } from './booking/booking-admin.controller';
 import { BookingEngine } from './booking/booking-engine';
 import { ManageTokens } from './booking/manage-token';
 import { BookingNotifications, MANAGE_TOKENS } from './booking/notifications';
+import { EventClaims, EventScannersController, ScannerController } from './booking/event-scanners';
+import { EventCheckIns, EventLive, EventMails, EventsAdminController, PublicEventsController } from './booking/events';
+import { EventRetentionJob } from './booking/event-retention';
+import { PlacesController } from './booking/places.controller';
 import { PublicBookingController } from './booking/public-booking.controller';
 import { RetentionJob } from './booking/retention';
 import { createClientsAuth } from './clients-auth';
@@ -23,13 +27,18 @@ import { CLIENTS_AUTH, ClientGuard } from './client-context';
 
 @Global()
 @Module({
-  controllers: [AccountsController, BookingAdminController, PublicBookingController, ClientsAdminController],
+  controllers: [AccountsController, BookingAdminController, PublicBookingController, EventsAdminController, PublicEventsController, EventScannersController, ScannerController, PlacesController, ClientsAdminController],
   providers: [
     ClientsDb,
     ClientGuard,
     BookingNotifications,
+    EventMails,
+    EventLive,
+    EventCheckIns,
+    EventClaims,
     BookingEngine,
     RetentionJob,
+    EventRetentionJob,
     ClientsAdminService,
     {
       // The admin site's own, limited login to the clients database when configured

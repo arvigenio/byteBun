@@ -70,6 +70,7 @@ services:
       ACCOUNTS_URL: ${ACCOUNTS_URL:-https://accounts.bytebuntech.com}
       BOOKINGS_URL: ${BOOKINGS_URL:-https://bookings.bytebuntech.com}
       PORTAL_URL: ${PORTAL_URL:-https://clientportal.bytebuntech.com}
+      SCANNER_URL: ${SCANNER_URL:-https://scanner.bytebuntech.com}
       CLIENT_COOKIE_DOMAIN: ${CLIENT_COOKIE_DOMAIN:-.bytebuntech.com}
       CLIENTS_MAIL_FROM: ${CLIENTS_MAIL_FROM:-Byte Bun Bookings <bookings@bytebuntech.com>}
       WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}

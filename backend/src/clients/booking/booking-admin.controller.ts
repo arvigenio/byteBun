@@ -9,6 +9,7 @@
 //   POST   /api/client/bookings/blocked-dates           409 { conflicts } unless existing=keep|cancel
 //   DELETE /api/client/bookings/blocked-dates/:id
 //   GET    /api/client/bookings/services   POST   PATCH /:id   DELETE /:id
+//   GET    /api/client/bookings/dashboard?days=7|30|90|365   past, today and future: counts, per day, per service
 //   GET    /api/client/bookings/items?view=upcoming|past|cancelled|all&from&to
 //   POST   /api/client/bookings/items                    a booking added by the business
 //   POST   /api/client/bookings/items/:id/cancel  { reason, notify }
@@ -115,6 +116,80 @@ export class BookingAdminController {
       take: 500,
     });
     return upcoming.filter((b) => !fitsHours(rules, { localDate: dateFromDb(b.localDate), startsAt: b.startsAt, endsAt: b.endsAt, dateOnly: b.dateOnly, serviceId: b.serviceId })).map(bookingRow);
+  }
+
+  /**
+   * The dashboard: bookings from `days` ago to `days` ahead (by appointment date, in the
+   * business's time zone). Each booking is one of: attended (checked in), unattended (over, not
+   * checked in; no-shows are a part of these), upcoming (not over yet), cancelled.
+   */
+  @Get('dashboard')
+  @ClientRoute(VIEW)
+  async dashboard(@Req() req: Request, @Query('days') daysRaw?: string) {
+    const c = ctx(req);
+    const days = [7, 30, 90, 365].includes(Number(daysRaw)) ? Number(daysRaw) : 30;
+    const { rules } = await this.rules(c.org.id);
+    const today = todayIn(rules.timeZone);
+    const from = addDays(today, -days);
+    const to = addDays(today, days);
+    const now = new Date();
+    const rows = await this.db.booking.findMany({
+      where: { organizationId: c.org.id, localDate: { gte: dateToDb(from), lte: dateToDb(to) } },
+      select: { id: true, localDate: true, startsAt: true, endsAt: true, dateOnly: true, status: true, checkedInAt: true, noShowAt: true, source: true, serviceId: true, service: { select: { id: true, name: true } }, customer: { select: { name: true } } },
+      orderBy: { startsAt: 'asc' },
+    });
+    type Kind = 'attended' | 'unattended' | 'upcoming' | 'cancelled';
+    const kindOf = (b: (typeof rows)[number]): Kind => (b.status === 'cancelled' ? 'cancelled' : b.checkedInAt ? 'attended' : b.endsAt <= now ? 'unattended' : 'upcoming');
+    const empty = () => ({ attended: 0, unattended: 0, upcoming: 0, cancelled: 0 });
+
+    // Per day, the whole window (empty days too).
+    const byDay = new Map<string, ReturnType<typeof empty>>();
+    for (let d = from; d <= to; d = addDays(d, 1)) byDay.set(d, empty());
+    const past = { ...empty(), noShows: 0, booked: 0 };
+    const future = { booked: 0, upcoming: 0, cancelled: 0 };
+    const todayCounts = { ...empty(), booked: 0 };
+    const services = new Map<number, { id: number; name: string; booked: number } & ReturnType<typeof empty>>();
+    const sources = { public: 0, business: 0 };
+    for (const b of rows) {
+      const date = dateFromDb(b.localDate);
+      const k = kindOf(b);
+      byDay.get(date)![k] += 1;
+      if (date < today) {
+        past[k] += 1;
+        past.booked += 1;
+        if (b.noShowAt) past.noShows += 1;
+      } else if (date === today) {
+        todayCounts[k] += 1;
+        todayCounts.booked += 1;
+      } else {
+        future.booked += 1;
+        if (k === 'cancelled') future.cancelled += 1;
+        else future.upcoming += 1;
+      }
+      const s = services.get(b.service.id) ?? { id: b.service.id, name: b.service.name, booked: 0, ...empty() };
+      s.booked += 1;
+      s[k] += 1;
+      services.set(b.service.id, s);
+      if (b.status !== 'cancelled') sources[b.source === 'business' ? 'business' : 'public'] += 1;
+    }
+    const decided = past.attended + past.unattended + todayCounts.attended + todayCounts.unattended;
+    return {
+      days,
+      today,
+      from,
+      to,
+      timeZone: rules.timeZone,
+      past,
+      todayCounts,
+      future,
+      attendanceRate: decided ? Math.round(((past.attended + todayCounts.attended) / decided) * 100) : null,
+      perDay: [...byDay].map(([date, v]) => ({ date, ...v })),
+      services: [...services.values()].sort((a, b) => b.booked - a.booked),
+      sources,
+      todayList: rows
+        .filter((b) => dateFromDb(b.localDate) === today)
+        .map((b) => ({ id: b.id, startsAt: b.startsAt, dateOnly: b.dateOnly, customer: b.customer.name, service: b.service.name, kind: kindOf(b) })),
+    };
   }
 
   @Get('overview')
@@ -405,7 +480,12 @@ export class BookingAdminController {
       where: { organizationId: c.org.id, ...(body.id ? { id: body.id } : { checkInCode: code! }) },
       include: { service: { select: { id: true, name: true } }, customer: { select: { name: true, email: true, phone: true } } },
     });
-    if (!b) throw new ApiError(404, { error: 'not_found', message: 'No booking matches this code.' });
+    if (!b) {
+      // Event registrations are checked in on their event's own scanner.
+      const ticket = code ? await this.db.eventTicket.findFirst({ where: { organizationId: c.org.id, code }, include: { event: { select: { id: true, title: true } } } }) : null;
+      if (ticket) throw new ApiError(409, { error: 'event_code', message: `This code is a registration for the event “${ticket.event.title}”. Check it in on that event’s scanner.`, event: ticket.event });
+      throw new ApiError(404, { error: 'not_found', message: 'No booking matches this code.' });
+    }
     const { rules } = await this.rules(c.org.id);
     const today = todayIn(rules.timeZone);
     const now = new Date();

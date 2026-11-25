@@ -9,6 +9,8 @@ export interface ApiErrorBody {
   fields?: Record<string, string>;
   /** Bookings: the existing bookings a change would affect (e.g. blocking a date), for the UI to list. */
   conflicts?: unknown[];
+  /** Check-in: the event a scanned code belongs to (when it isn't for this scanner). */
+  event?: unknown;
 }
 
 export class ApiError extends HttpException {

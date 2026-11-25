@@ -10,7 +10,8 @@
 // down to 1 hour before), bookings.whatsapp (WhatsApp to customers), bookings.whatsapp_alerts
 // (WhatsApp alerts to the owner), bookings.full_branding (all colors, no "Powered by" footer).
 // Limits: bookings.monthly (bookings created per month, cancelled ones count),
-// bookings.services (active services), bookings.staff (members), bookings.retention_days.
+// bookings.services (active services), bookings.staff (members), bookings.retention_days,
+// events.participants (per event; bigger events: vouchers, booking/events.ts), events.per_day.
 import type { ClientsDb, ClientsTx } from './clients-db';
 
 export interface AppInfo {
