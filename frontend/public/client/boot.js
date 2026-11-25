@@ -10,7 +10,7 @@
   var product = {
     bookings: { name: 'Byte Bun Bookings', short: 'Bookings', color: '#0F766E', icon: '/client/bookings-icon.svg', manifest: '/client/bookings.webmanifest' },
     portal: { name: 'Byte Bun Client Portal', short: 'Client Portal', color: '#331165', icon: '/client/portal-icon.svg', manifest: '/client/portal.webmanifest' },
-    accounts: { name: 'Byte Bun Accounts', short: 'Accounts', color: '#0F766E', icon: '/client/bookings-icon.svg', manifest: null },
+    accounts: { name: 'Byte Bun Accounts', short: 'Accounts', color: '#C2410C', icon: '/client/accounts-icon.svg', manifest: null },
     scanner: { name: 'Byte Bun Scanner', short: 'Scanner', color: '#0B0D12', icon: '/client/scanner-icon.svg', manifest: '/client/scanner.webmanifest' },
   }[surface];
   // On the bookings host, the public booking and event pages (/{business}, /manage) belong to the

@@ -2,7 +2,8 @@
 
 /* The client apps' own look (not the Byte Bun marketing site's). Neutral surfaces with ONE brand
    color, --color-brand, that changes with where the app runs:
-     bookings / accounts host   Byte Bun Bookings teal
+     bookings host              Byte Bun Bookings teal
+     accounts host              Byte Bun orange (deep enough for white text on buttons)
      clientportal host          Byte Bun purple
      a public booking page      the business's own color (set inline by the page)
    Never hard-code hex in components; use these tokens. */
@@ -47,6 +48,12 @@
     from { opacity: 0; transform: translateY(18px); }
     to { opacity: 1; transform: none; }
   }
+}
+
+:root[data-surface="accounts"] {
+  --color-brand: #C2410C;
+  --color-brand-soft: #FFF1DC;
+  --color-accent: #FFA612;
 }
 
 :root[data-surface="portal"] {

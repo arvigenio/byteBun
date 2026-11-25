@@ -13,13 +13,13 @@ import { Button, Field, Input, Loading, Select } from '../ui.jsx';
 const BRAND = {
   bookings: { name: 'Byte Bun Bookings', tag: 'Bookings & Events', icon: '/client/bookings-icon.svg', signIn: 'Sign in to Bookings & Events', about: 'Manage your appointments, booking page and events.' },
   portal: { name: 'Byte Bun Client Portal', tag: null, icon: '/client/portal-icon.svg', signIn: 'Sign in to your client portal', about: null },
-  accounts: { name: 'Byte Bun', tag: null, icon: '/client/bookings-icon.svg', signIn: 'Sign in to Byte Bun', about: null },
-}[surface] ?? { name: 'Byte Bun', tag: null, icon: '/client/bookings-icon.svg', signIn: 'Sign in to Byte Bun', about: null };
+  accounts: { name: 'Byte Bun', tag: null, icon: '/client/accounts-icon.svg', signIn: 'Sign in to Byte Bun', about: null },
+}[surface] ?? { name: 'Byte Bun', tag: null, icon: '/client/accounts-icon.svg', signIn: 'Sign in to Byte Bun', about: null };
 
 function AuthCard({ title, subtitle, children }) {
   return (
     <main className="relative grid min-h-screen place-items-center px-4 py-10">
-      <Scatter />
+      <Scatter set={surface === 'accounts' ? 'security' : 'bookings'} />
       <div className="relative w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-2">
           <div className="flex items-center gap-2.5">

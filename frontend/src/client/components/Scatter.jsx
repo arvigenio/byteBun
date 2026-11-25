@@ -1,5 +1,6 @@
-// A page background (sign-in, booking and event pages): a few outline calendars, notes, a clock and a ticket, scattered and
-// tilted, very faint in the brand color. Some drift slowly (not with reduced motion).
+// A page background (sign-in, booking and event pages): a few outline doodles, scattered and tilted, very
+// faint in the brand color. Some drift slowly (not with reduced motion). Two sets: `bookings` (calendars,
+// notes, a clock and a ticket) and `security` (keys and locks, for the accounts sign-in).
 const DOODLES = {
   calendar: (
     <>
@@ -32,7 +33,38 @@ const DOODLES = {
       <path d="M38 18v30" strokeDasharray="3 4" />
     </>
   ),
+  lock: (
+    <>
+      <rect x="12" y="28" width="40" height="30" rx="6" />
+      <path d="M20 28v-8a12 12 0 0124 0v8" />
+      <circle cx="32" cy="41" r="4" />
+      <path d="M32 45v5" />
+    </>
+  ),
+  lockOpen: (
+    <>
+      <rect x="12" y="28" width="40" height="30" rx="6" />
+      <path d="M20 28v-8a12 12 0 0123.3-4" />
+      <circle cx="32" cy="41" r="4" />
+      <path d="M32 45v5" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="19" cy="32" r="11" />
+      <circle cx="19" cy="32" r="4" />
+      <path d="M30 32h28M48 32v9M56 32v7" />
+    </>
+  ),
+  keyOld: (
+    <>
+      <circle cx="16" cy="20" r="9" />
+      <path d="M23 27l29 29M44 48l5-5M50 54l5-5" />
+    </>
+  ),
 };
+// The bookings set uses these kinds; the security set swaps each one for a key or a lock.
+const SECURITY = { calendar: 'lock', note: 'key', clock: 'lockOpen', ticket: 'keyOld', check: 'lock' };
 // [kind, left %, top %, size px, rotate deg, drifts, hidden on phones]
 const SCATTER = [
   ['calendar', 6, 10, 72, -12, true, false],
@@ -47,14 +79,14 @@ const SCATTER = [
   ['check', 50, 14, 36, -10, false, true],
 ];
 
-export function Scatter() {
+export function Scatter({ set = 'bookings' }) {
   return (
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,var(--color-brand-soft),transparent_60%)]" />
       {SCATTER.map(([kind, left, top, size, rot, drift, phoneHidden], i) => (
         <div key={i} className={`absolute ${drift ? 'float-slow' : ''} ${phoneHidden ? 'mobile:hidden' : ''}`} style={{ left: `${left}%`, top: `${top}%`, animationDelay: `${i * -1.3}s` }}>
           <svg viewBox="0 0 64 64" width={size} height={size} fill="none" stroke="var(--color-brand)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: `rotate(${rot}deg)`, opacity: 0.13 }}>
-            {DOODLES[kind]}
+            {DOODLES[set === 'security' ? SECURITY[kind] : kind]}
           </svg>
         </div>
       ))}
