@@ -1,15 +1,52 @@
 {
+  "id": "/app",
   "name": "Byte Bun Bookings",
   "short_name": "Bookings",
+  "description": "Bookings and events for your business: schedule, check-ins, events and scanners.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#0F766E",
   "icons": [
-    { "src": "/client/bookings-icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/client/bookings-icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/client/bookings-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/client/bookings-icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    {
+      "src": "/client/bookings-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/client/bookings-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/client/bookings-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/client/bookings-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "shortcuts": [
+    {
+      "name": "Bookings",
+      "url": "/app"
+    },
+    {
+      "name": "Events",
+      "url": "/app/events"
+    },
+    {
+      "name": "Check-in scanner",
+      "url": "/app/scan"
+    }
   ]
 }

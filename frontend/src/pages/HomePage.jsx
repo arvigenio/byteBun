@@ -5,6 +5,7 @@ import { Build } from '../components/Build.jsx';
 import { FreeBand } from '../components/FreeBand.jsx';
 import { Problem } from '../components/Problem.jsx';
 import { Services } from '../components/Services.jsx';
+import { OurApps } from '../components/OurApps.jsx';
 import { Metrics } from '../components/Metrics.jsx';
 import { Packages } from '../components/Packages.jsx';
 import { Demos } from '../components/Demos.jsx';
@@ -34,6 +35,7 @@ export function HomePage() {
         <FreeBand />
         <Problem />
         <Services />
+        <OurApps />
         <Metrics />
         <Demos />
         <Packages />

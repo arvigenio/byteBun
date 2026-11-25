@@ -42,6 +42,34 @@ describe('chat: ChatService', () => {
     assert.deepEqual(model.calls[0].tools.map((t) => t.name), ['check_availability', 'open_booking_calendar']);
   });
 
+  it('answers Bookings & Events questions on the bookings landing page, with no booking tools', async () => {
+    const model = new FakeModel();
+    model.next = { text: 'Yes, events are free to start.' };
+    const out = await new ChatService(model, NO_SLOTS).reply({ messages: [{ role: 'user', text: 'Can I run events?' }], product: 'bookings' });
+    assert.deepEqual(out, { reply: 'Yes, events are free to start.' });
+    const { system, tools, context } = model.calls[0];
+    assert.match(system, /Byte Bun Bookings & Events/);
+    assert.match(system, /Events: one-time seminars/);
+    assert.match(system, /Bookings Pro \(\$10\/month/);
+    assert.doesNotMatch(system, /open_booking_calendar/);
+    assert.deepEqual(tools, []);
+    assert.equal(context, undefined);
+
+    model.available = false;
+    const offline = await new ChatService(model, NO_SLOTS).reply({ messages: [{ role: 'user', text: 'hi' }], product: 'bookings' });
+    assert.equal(offline.offline, true);
+    assert.match(offline.reply, /Start free/);
+  });
+
+  it('knows the Bookings & Events app on the main website', async () => {
+    const model = new FakeModel();
+    await new ChatService(model, NO_SLOTS).reply({ messages: [{ role: 'user', text: 'Do you have a booking app?' }] });
+    const { system } = model.calls[0];
+    assert.match(system, /BYTE BUN BOOKINGS & EVENTS/);
+    assert.match(system, /Our Apps/);
+    assert.match(system, /Every event includes up to 50 participants/);
+  });
+
   it('is told to ask for their line of business and goal before opening the calendar', async () => {
     const model = new FakeModel();
     await new ChatService(model, NO_SLOTS).reply({ messages: [{ role: 'user', text: 'Can I book a call?' }] });

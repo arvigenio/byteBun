@@ -3,7 +3,8 @@
 # or by hand:  /opt/bytebun-web/scripts/deploy.sh
 #
 #   1. fast-forward the checkout to origin/main (refuses if the server copy was edited)
-#   2. database guard: STOPS (and resets the checkout) if the update changes the db service
+#   2. database guard: STOPS (and resets the checkout) if the update changes the db service,
+#      or if the data volume is missing while backups exist (it would start an empty database)
 #      (image, volume, settings) or contains a risky migration; see check_database_changes
 #   3. backs up the database (pg_dump) to backups/, keeping the newest 14; no backup, no deploy
 #   4. keep the running app image as bytebun-web:previous
@@ -79,6 +80,12 @@ main() {
     echo "none"
   fi
 
+  log "Checking the data volume"
+  if ! check_data_volume "$app_dir/backups"; then
+    git reset --quiet --hard "$previous_commit"
+    return 1
+  fi
+
   log "Backing up the database"
   if [[ ${SKIP_BACKUP:-} == 1 ]]; then
     echo "SKIP_BACKUP=1: no backup taken."
@@ -137,6 +144,25 @@ main() {
 #    comment, so migration.sql's Prisma checksum never changes. Those deploy automatically;
 #    the pre-deploy backup still runs.
 # If a commit's db service can't be resolved, that counts as a change (fail safe).
+# The database lives in the Docker volume DATA_VOLUME. If it's missing but backups exist, starting
+# would create a NEW, EMPTY database (accounts, bookings and events "gone"): stop instead, so the
+# volume can be found or a backup restored (docs/DEPLOY-VPS.md, "Restore").
+DATA_VOLUME=bytebun-prod_pg-data
+check_data_volume() {
+  local dir=$1
+  if docker volume inspect "$DATA_VOLUME" >/dev/null 2>&1; then
+    echo "$DATA_VOLUME is there"
+    return 0
+  fi
+  if ls "$dir"/pre-deploy-*.dump >/dev/null 2>&1; then
+    log "STOPPED: the data volume $DATA_VOLUME is missing, but backups exist in $dir."
+    echo "Starting now would create an EMPTY database. Nothing was changed."
+    echo "Check 'docker volume ls' for the old volume, or restore the newest backup, then deploy again."
+    return 1
+  fi
+  echo "No data volume yet and no backups: first deploy, a new database will be created."
+}
+
 check_database_changes() {
   local from=$1 to=$2 old new tmp f
   [[ $from == "$to" ]] && return 0

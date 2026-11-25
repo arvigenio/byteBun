@@ -28,6 +28,8 @@ export const chatSchema = yup.object({
     .test('ends-with-user', 'Please type a message.', (list) => list?.[list.length - 1]?.role === 'user'),
   // The visitor's IANA time zone, for availability answers. An unknown one is ignored (Manila time).
   timeZone: yup.string().trim().max(64).optional(),
+  // Which chat: the website's (default) or the Bookings & Events landing page's (no booking tools).
+  product: yup.string().oneOf(['site', 'bookings'] as const).optional(),
 });
 
 export type ChatInput = yup.InferType<typeof chatSchema>;

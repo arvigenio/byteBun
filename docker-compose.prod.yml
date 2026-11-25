@@ -105,6 +105,10 @@ services:
 
 volumes:
   pg-data:
+    # A fixed name (the one Compose already gave it: <project>_pg-data), so the data volume never
+    # changes if the project or folder is renamed. Both databases live here: the admin/landing
+    # one and the clients one (accounts, bookings, events). Never `docker compose down -v`.
+    name: bytebun-prod_pg-data
 
 networks:
   bytebun:

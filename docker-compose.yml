@@ -137,6 +137,8 @@ services:
 
 volumes:
   pg-dev-data:
+    # A fixed name (the existing one), so dev data survives renaming the folder or project.
+    name: bytebun_pg-dev-data
 
 networks:
   bytebun:

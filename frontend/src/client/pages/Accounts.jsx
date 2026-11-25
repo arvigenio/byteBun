@@ -67,16 +67,29 @@ export function AccountsHome({ guest = null }) {
 /** Email -> 6-digit code. New emails get an account on their first sign-in. */
 export function SignInPage() {
   const { data: cfg } = useConfigQuery();
+  const me = useMeQuery();
   const [email, setEmail] = useState(null);
   const next = new URLSearchParams(window.location.search).get('next');
 
+  /** Where a signed-in person goes: ?next (one of our hosts), else their app (or setup). */
+  const leave = (who) => {
+    if (who && !who.business) return go(welcomeUrl(cfg));
+    go(safeNext(next, cfg) ?? landingUrl(cfg, who?.business));
+  };
+
+  // Already signed in (e.g. opened /sign-in again): straight to the app, no form.
+  const signedIn = !!me.data && !me.error;
+  useEffect(() => {
+    if (cfg && signedIn) leave(me.data);
+  }, [cfg, signedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const finish = async () => {
     // Freshly signed in: decide where to go.
-    const me = await fetch('/api/client/me', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null));
-    const target = safeNext(next, cfg);
-    if (me && !me.business) return go(welcomeUrl(cfg));
-    go(target ?? landingUrl(cfg, me?.business));
+    const fresh = await fetch('/api/client/me', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null));
+    leave(fresh);
   };
+
+  if (!cfg || me.isLoading || signedIn) return <Loading label={signedIn ? 'You’re signed in. Opening your app…' : 'Loading…'} />;
 
   return (
     <AuthCard title={email ? 'Check your email' : BRAND.signIn} subtitle={email ? `We sent a 6-digit code to ${email}.` : `${BRAND.about ? `${BRAND.about} ` : ''}New here? Enter your email and we’ll create your free account.`}>

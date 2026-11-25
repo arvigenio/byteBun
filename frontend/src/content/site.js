@@ -35,6 +35,7 @@ export const site = {
   nav: [
     { label: 'What we build', href: '#build' },
     { label: 'Services', href: '#services' },
+    { label: 'Our Apps', href: '#apps' },
     { label: 'Packages', href: '#packages' },
     { label: 'Demos', href: '#demos' },
     { label: 'FAQ', href: '#faq' },
@@ -136,6 +137,38 @@ export const site = {
       { icon: 'database', title: 'Custom web apps and dashboards', text: 'Client portals, booking tools, reporting dashboards, and integrations built around the tools you already use.' },
     ],
     cta: { text: 'Not sure what you need?', label: 'Book a 30-minute call', lead: 'services' },
+  },
+
+  // Our own apps (the "Our Apps" menu item). Each one: its products, and links to start or sign in.
+  apps: {
+    eyebrow: 'Our apps',
+    title: 'Apps you can start using today',
+    subtitle: 'Made by Byte Bun for local businesses. Free to start: no card needed.',
+    list: [
+      {
+        name: 'Byte Bun Bookings & Events',
+        icon: '/client/bookings-icon.svg',
+        url: 'bookings.bytebuntech.com',
+        text: 'Online booking and event registration in one app.',
+        products: [
+          {
+            icon: 'calendar',
+            name: 'Bookings',
+            text: 'Your own booking page for appointments: services, opening hours, time off and team.',
+            points: ['Email reminders and easy rescheduling', 'QR check-in at the front desk', 'A dashboard of booked, attended and cancelled'],
+          },
+          {
+            icon: 'gift',
+            name: 'Events',
+            text: 'Seminars, webinars and classes on their own page, onsite or online.',
+            points: ['Free or paid registration, with a QR ticket by email', 'Phone scanners for attendance and freebies', 'Live attendance and CSV, Excel or JSON export'],
+          },
+        ],
+        cta: { label: 'Start free', href: 'https://bookings.bytebuntech.com/' },
+        signIn: { label: 'Sign in', href: 'https://bookings.bytebuntech.com/sign-in' },
+        note: 'Free plan: up to 100 bookings a month and events of up to 50 participants.',
+      },
+    ],
   },
 
   // Design targets, not results. Keep the subtitle saying so.

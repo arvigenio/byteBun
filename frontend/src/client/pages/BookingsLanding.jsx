@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { site } from '../../content/site.js';
 import { SmoothScroll } from '../../components/SmoothScroll.jsx';
 import { useConfigQuery } from '../api.js';
+import { BookingsChat } from '../components/BookingsChat.jsx';
 import { inkOn } from '../lib/color.js';
 import { signInUrl } from '../lib/surface.js';
 import { Icon, ICONS } from '../ui.jsx';
@@ -68,13 +69,21 @@ const clamp01 = (n) => Math.min(1, Math.max(0, n));
 
 const FEATURES = [
   { icon: ICONS.calendar, title: 'Your own booking page', text: 'A clean page at bookings.bytebuntech.com/your-business. Customers pick a service and a time in seconds, on any phone.' },
-  { icon: ICONS.clock, title: 'Hours that fit your business', text: 'Opening hours per weekday, lunch breaks, slot length, buffers between visits, daily limits and holidays.' },
+  { icon: ICONS.clock, title: 'A schedule that fits your business', text: 'Opening hours per weekday, lunch breaks, slot length, buffers between visits, people per slot and daily limits.' },
   { icon: ICONS.check, title: 'Never double-booked', text: 'Every booking is checked and saved in one step, so two people can never take the same last place.' },
   { icon: ICONS.list, title: 'Reminders that cut no-shows', text: 'Automatic email reminders 2 days and 1 day before, each with links to reschedule or cancel.' },
   { icon: ICONS.phone, title: 'Changes without phone calls', text: 'Customers reschedule or cancel from their own private link. Close to the appointment, they’re asked to call you.' },
   { icon: ICONS.users, title: 'Your whole team', text: 'Invite staff as owner, admin or staff. Everyone sees the schedule; only the right people change settings.' },
-  { icon: ICONS.palette, title: 'Your brand', text: 'Your logo, colors and instructions on the page and in every email. Private details only go to people who booked.' },
+  { icon: ICONS.xCircle, title: 'Block time your way', text: 'Close whole days for holidays, or block specific hours like a staff meeting, for the whole business or just one service.' },
   { icon: ICONS.grid, title: 'Works like an app', text: 'Add it to your phone’s home screen and check today’s bookings in one tap.' },
+];
+
+// Events: one-time seminars, webinars and classes (booking/events.ts).
+const EVENT_FEATURES = [
+  { icon: ICONS.star, title: 'An event page in minutes', text: 'A step-by-step setup: name, description, date and time zone, onsite with a map pin or online, and how many can join.' },
+  { icon: ICONS.tag, title: 'Free or paid', text: 'Free events: anyone registers. Paid: you collect the payment and give each person a code to confirm their place.' },
+  { icon: ICONS.qr, title: 'QR tickets and scanners', text: 'Attendees get a QR ticket by email (and can download it). Add phone scanners for the door and for freebies like water or snacks.' },
+  { icon: ICONS.users, title: 'Live attendance', text: 'See who checked in as it happens, search registrations, and export everything to Excel, CSV or JSON.' },
 ];
 
 const SIDES = {
@@ -100,6 +109,10 @@ const FAQ = [
   { q: 'Do my customers need an account?', a: 'No. They book with their name and email, and manage their booking from the private link in their confirmation.' },
   { q: 'What kind of business can use it?', a: 'Any business that takes appointments or reservations: salons, studios, coaches, tutors, consultants, repair and cleaning services, clinics and more. Services can have their own duration and buffer, several people can book the same slot, and you set breaks and holidays.' },
   { q: 'What happens to old bookings on the Free plan?', a: 'They are deleted 60 days after the appointment date. You get an email a week before with a CSV download. On Bookings Pro, your history is kept.' },
+  { q: 'Can I run events too?', a: 'Yes. Create seminars, webinars or classes on their own page, onsite or online, free or paid to attend. Every event includes up to 50 participants on every plan; bigger events are available per event (51–300 for $10, up to 500 for $20). The Free plan allows one event per day.' },
+  { q: 'How does event check-in work?', a: 'Onsite attendees get a QR ticket by email and can download it as an image or PDF. Scan it at the door from the event’s check-in page, or add event scanners: people who sign in on their own phone to check attendees in and hand out claimables like water or snacks. Check-ins show up live.' },
+  { q: 'How do paid events work without online payment?', a: 'You collect the payment yourself, add the attendee and give them an 8-character code. They enter it on the event page to confirm their place and receive their QR ticket.' },
+  { q: 'Are free events kept forever?', a: 'Events of up to 50 participants are deleted automatically 3 months after they end. You agree to this when creating the event, get reminders 7, 3 and 1 days before, and receive the complete event as CSV and JSON by email.' },
   { q: 'Can I upgrade later?', a: 'Yes, anytime, and you keep everything you’ve set up.' },
 ];
 
@@ -223,6 +236,9 @@ function Header({ start, signIn }) {
           <a className="hover:text-ink" href="#features">
             Features
           </a>
+          <a className="hover:text-ink" href="#events">
+            Events
+          </a>
           <a className="hover:text-ink" href="#how">
             How it works
           </a>
@@ -328,7 +344,7 @@ export function BookingsLanding() {
   const start = cfg ? signInUrl(cfg, `${cfg.bookingsUrl}/app`) : '/sign-in';
   useReveal();
   useEffect(() => {
-    document.title = 'Byte Bun Bookings · Free online booking for your business';
+    document.title = 'Byte Bun Bookings & Events · Free online booking and events for your business';
   }, []);
 
   const heroShift = useScrollValue(() => Math.min(window.scrollY, 600));
@@ -355,13 +371,13 @@ export function BookingsLanding() {
           <div className="relative mx-auto grid max-w-6xl items-center gap-14 desktop:grid-cols-[1.1fr_1fr]">
             <div data-reveal="left">
               <span className="inline-flex items-center gap-2 rounded-full border border-brand/25 bg-brand-soft px-3 py-1 text-sm font-medium text-brand">
-                <span className="size-2 rounded-full bg-brand" /> Free for up to 100 bookings a month
+                <span className="size-2 rounded-full bg-brand" /> Bookings & Events · free to start
               </span>
               <h1 className="mt-5 text-5xl leading-[1.05] font-bold tracking-tight mobile:text-[38px]">
-                Online booking your customers <span className="text-brand">actually use.</span>
+                Bookings and events your customers <span className="text-brand">actually use.</span>
               </h1>
               <p className="mt-5 max-w-xl text-lg text-muted">
-                Your own booking page, automatic reminders and easy rescheduling, for any business that takes appointments. Set it up in minutes and share your link today.
+                Your own booking page with reminders and easy rescheduling, plus event pages for seminars, webinars and classes, with QR tickets and check-in. Set it up in minutes and share your link today.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <a href={start} className="rounded-btn bg-brand px-6 py-3.5 font-semibold text-brand-ink shadow-lg shadow-brand/25 transition hover:-translate-y-0.5 hover:brightness-110">
@@ -387,7 +403,7 @@ export function BookingsLanding() {
             <div data-reveal="up" className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-semibold tracking-wider text-brand uppercase">Features</p>
               <h2 className="mt-2 text-4xl font-bold tracking-tight mobile:text-3xl">Everything you need to take bookings</h2>
-              <p className="mt-3 text-muted">Fewer phone calls, fewer no-shows, and a schedule that fills itself.</p>
+              <p className="mt-3 text-muted">Fewer phone calls, fewer no-shows, and a schedule that fills itself, with time blocked off for the whole business or per service.</p>
             </div>
             <div data-reveal="stagger" className="mt-14 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {FEATURES.map((f) => (
@@ -399,6 +415,36 @@ export function BookingsLanding() {
                   <p className="mt-1.5 text-sm text-muted">{f.text}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Events */}
+        <section id="events" className="scroll-mt-20 px-4 py-24 mobile:py-16">
+          <div className="mx-auto max-w-6xl">
+            <div data-reveal="up" className="mx-auto max-w-2xl text-center">
+              <p className="text-sm font-semibold tracking-wider text-brand uppercase">Events</p>
+              <h2 className="mt-2 text-4xl font-bold tracking-tight mobile:text-3xl">Seminars, webinars and classes too</h2>
+              <p className="mt-3 text-muted">Run one-time events from the same app: registration, QR tickets, check-in at the door, and freebies, all in one place.</p>
+            </div>
+            <div data-reveal="stagger" className="mt-14 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {EVENT_FEATURES.map((f) => (
+                <div key={f.title} className="group rounded-[18px] border border-line bg-surface p-6 transition duration-300 hover:-translate-y-1 hover:border-brand/40 hover:shadow-[0_20px_40px_-24px_rgba(15,118,110,0.45)]">
+                  <span className="grid size-11 place-items-center rounded-xl bg-brand text-brand-ink transition group-hover:scale-110">
+                    <Icon d={f.icon} />
+                  </span>
+                  <h3 className="mt-4 font-semibold">{f.title}</h3>
+                  <p className="mt-1.5 text-sm text-muted">{f.text}</p>
+                </div>
+              ))}
+            </div>
+            <p data-reveal="up" className="mt-8 text-center text-sm text-muted">
+              Every event includes up to 50 participants. Bigger events are available per event: 51–300 for $10, up to 500 for $20.
+            </p>
+            <div data-reveal="up" className="mt-6 flex justify-center">
+              <a href={start} className="rounded-btn bg-brand px-6 py-3.5 font-semibold text-brand-ink shadow-lg shadow-brand/25 transition hover:-translate-y-0.5 hover:brightness-110">
+                Create your first event
+              </a>
             </div>
           </div>
         </section>
@@ -512,7 +558,7 @@ export function BookingsLanding() {
           <div data-reveal="zoom" className="relative mx-auto max-w-5xl overflow-hidden rounded-[28px] px-8 py-16 text-center mobile:px-5 mobile:py-12" style={{ background: brand, color: inkOn(brand) }}>
             <div className="blob pointer-events-none absolute -right-20 -bottom-20 size-72 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
             <h2 className="relative text-4xl font-bold tracking-tight mobile:text-3xl">Your booking page could be live in 10 minutes</h2>
-            <p className="relative mx-auto mt-3 max-w-xl opacity-90">Start free. Upgrade only when you need unlimited bookings.</p>
+            <p className="relative mx-auto mt-3 max-w-xl opacity-90">Start free with bookings and events. Upgrade only when you need unlimited bookings.</p>
             <a href={start} className="relative mt-8 inline-block rounded-btn bg-white px-7 py-3.5 font-semibold text-[#0F766E] transition hover:-translate-y-0.5">
               Create my booking page
             </a>
@@ -522,7 +568,7 @@ export function BookingsLanding() {
         <footer className="border-t border-line px-4 py-4 text-xs text-faint">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <span className="flex items-center gap-1.5">
-              <img src="/client/bookings-icon.svg" alt="" className="size-4 rounded" /> Byte Bun Bookings by{' '}
+              <img src="/client/bookings-icon.svg" alt="" className="size-4 rounded" /> Byte Bun Bookings & Events by{' '}
               <a href="https://bytebuntech.com" className="underline hover:text-ink">
                 Byte Bun Tech
               </a>
@@ -531,6 +577,7 @@ export function BookingsLanding() {
           </div>
         </footer>
       </div>
+      <BookingsChat start={start} />
     </SmoothScroll>
   );
 }

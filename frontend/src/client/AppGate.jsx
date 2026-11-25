@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { InstallApp } from './components/InstallApp.jsx';
 import { authHttp, useConfigQuery, useMeQuery, useSetActiveBusinessMutation } from './api.js';
 import { bookingsBase, go, PRODUCT, signInUrl, surface, welcomeUrl } from './lib/surface.js';
 import { usePathname } from '../lib/router.js';
@@ -187,6 +188,7 @@ function Shell({ shell, me, cfg, children }) {
                 View booking page <Icon d={ICONS.external} className="size-4" />
               </a>
             )}
+            <InstallApp />
             <AppSwitcher business={me.business} cfg={cfg} />
             <Button variant="ghost" size="sm" onClick={signOut} title={me.user.email}>
               Sign out

@@ -4,6 +4,7 @@ import { usePathname } from '../../lib/router.js';
 import { useScannerCheckInMutation, useScannerPageQuery, useScannerSessionQuery, useScannerSignInMutation, useScannerSignOutMutation, useScannerUndoMutation } from '../api.js';
 import { ClaimResult, EventResult } from '../bookings/EventsPages.jsx';
 import { Scanner } from '../bookings/CheckInPage.jsx';
+import { InstallApp } from '../components/InstallApp.jsx';
 import { fmtLongDate } from '../lib/format.js';
 import { Badge, Icon, ICONS, Loading, Spinner, useConfirm, usePrompt } from '../ui.jsx';
 
@@ -168,6 +169,11 @@ function SignIn({ scannerCode: fromLink, notice, onSignedIn }) {
           </svg>
           Each access code works on one device. You stay signed in until the organizer ends your access.
         </p>
+
+        {/* Install before signing in: on iPhone the installed app doesn't share the browser's sign-in. */}
+        <div className="mt-4 flex justify-center">
+          <InstallApp dark />
+        </div>
 
         <p className="mt-8 text-center text-xs text-white/40">
           Powered by{' '}

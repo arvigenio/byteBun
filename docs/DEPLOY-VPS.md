@@ -93,13 +93,13 @@ Commands assume Ubuntu 22.04/24.04. `you` is your VPS user, `yourdomain.com` you
        redir https://yourdomain.com{uri} permanent
    }
    # Client apps: the same container answers these hosts (it picks the app from the Host header).
-   accounts.yourdomain.com, bookings.yourdomain.com, clientportal.yourdomain.com {
+   accounts.yourdomain.com, bookings.yourdomain.com, clientportal.yourdomain.com, scanner.yourdomain.com {
        reverse_proxy 127.0.0.1:4000
    }
    ```
-   Add DNS records for `accounts`, `bookings` and `clientportal` pointing at the server, and set `ACCOUNTS_URL`, `BOOKINGS_URL`, `PORTAL_URL` and `CLIENT_COOKIE_DOMAIN` in `.env` if your domain is not bytebuntech.com.
+   Add DNS records for `accounts`, `bookings`, `clientportal` and `scanner` (event check-in scanners) pointing at the server, and set `ACCOUNTS_URL`, `BOOKINGS_URL`, `PORTAL_URL`, `SCANNER_URL` and `CLIENT_COOKIE_DOMAIN` in `.env` if your domain is not bytebuntech.com.
 
-   Nginx equivalent: `proxy_pass http://127.0.0.1:4000;` with `proxy_set_header Host $host;`, `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and `proxy_set_header X-Forwarded-Proto $scheme;` (one `server` block can list all four hosts in `server_name`), plus a certificate from Certbot.
+   Nginx equivalent: `proxy_pass http://127.0.0.1:4000;` with `proxy_set_header Host $host;`, `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and `proxy_set_header X-Forwarded-Proto $scheme;` (one `server` block can list all five hosts in `server_name`; turn off `proxy_buffering` for `/api/client/bookings/events/<id>/live`, the live attendance stream), plus a certificate from Certbot.
 
    The API trusts one proxy hop (`TRUST_PROXY=1`), so rate limits use the visitor's real IP. **Behind Cloudflare, keep it at 1**: the app recognizes Cloudflare's addresses and reads the visitor's IP from the `CF-Connecting-IP` header (only when the request really came from Cloudflare, so it can't be faked; see `backend/src/common/client-ip.ts`). For a different CDN, increase it to the number of hops. Don't expose the app port publicly: with `TRUST_PROXY` set, anyone reaching it directly could fake their IP.
 

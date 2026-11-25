@@ -6,7 +6,7 @@ import { logger } from '../logging/logger';
 import { FEATURE_KEYS, GOAL_KEYS, OTHER_GOAL } from '../leads/lead-options';
 import { CHAT_MODEL, type ChatModel, type ChatTurn, type ToolRound } from './chat-model';
 import { type ChatInput, MAX_TURNS } from './chat.schema';
-import { AVAILABILITY_TOOL, BOOKING_TOOL, BUSINESS_TYPES, systemPrompt, visitorContext } from './knowledge';
+import { AVAILABILITY_TOOL, BOOKING_TOOL, BUSINESS_TYPES, bookingsPrompt, systemPrompt, visitorContext } from './knowledge';
 
 /** What the booking card in the chat is prefilled with. Valid input for POST /api/leads. */
 export interface BookingPrefill {
@@ -35,6 +35,8 @@ export type SlotSource = Pick<BookingService, 'openSlots'>;
 
 const OFFLINE_REPLY =
   "Sorry, I can't chat right now. You can still book your free 30-minute consultation on our booking page, and we'll answer every question on the call.";
+const BOOKINGS_OFFLINE_REPLY =
+  "Sorry, I can't chat right now. You can start free with the Start free button on this page, or email hello@bytebuntech.com and we'll answer your question.";
 const CALENDAR_REPLY = 'Here are the open times for your free 30-minute call. Pick one that suits you.';
 const MODEL_TIMEOUT_MS = 25_000;
 /** Availability lookups per reply (e.g. "Tuesday?" then "the week after?"); then it must answer. */
@@ -75,7 +77,9 @@ export class ChatService {
   ) {}
 
   async reply(input: ChatInput, { ip, now = new Date() }: { ip?: string; now?: Date } = {}): Promise<ChatReply> {
-    if (!this.model.available) return { reply: OFFLINE_REPLY, offline: true };
+    const bookings = input.product === 'bookings';
+    const offline = { reply: bookings ? BOOKINGS_OFFLINE_REPLY : OFFLINE_REPLY, offline: true as const };
+    if (!this.model.available) return offline;
 
     // The latest turns only, starting with a visitor message (the model expects that).
     let turns: ChatTurn[] = input.messages.slice(-MAX_TURNS).map((m) => ({ role: m.role, text: m.text }));
@@ -84,13 +88,15 @@ export class ChatService {
 
     try {
       const signal = AbortSignal.timeout(MODEL_TIMEOUT_MS); // for the whole reply, lookups included
-      const system = systemPrompt();
-      const context = visitorContext(describeNow(now, timeZone), timeZone);
+      // The Bookings & Events chat only answers questions: no consultation calendar.
+      const system = bookings ? bookingsPrompt() : systemPrompt();
+      const tools = bookings ? [] : [AVAILABILITY_TOOL, BOOKING_TOOL];
+      const context = bookings ? undefined : visitorContext(describeNow(now, timeZone), timeZone);
       const rounds: ToolRound[] = [];
       for (;;) {
-        const out = await this.model.reply({ system, context, turns, rounds, tools: [AVAILABILITY_TOOL, BOOKING_TOOL], signal });
+        const out = await this.model.reply({ system, context, turns, rounds, tools, signal });
 
-        if (out.call?.name === AVAILABILITY_TOOL.name) {
+        if (!bookings && out.call?.name === AVAILABILITY_TOOL.name) {
           if (rounds.length >= MAX_LOOKUPS) {
             if (out.text) return { reply: out.text };
             throw new Error('Too many availability lookups');
@@ -98,7 +104,7 @@ export class ChatService {
           rounds.push({ call: out.call, result: await this.checkAvailability(out.call.args, timeZone) });
           continue;
         }
-        if (out.call?.name === BOOKING_TOOL.name) {
+        if (!bookings && out.call?.name === BOOKING_TOOL.name) {
           const booking = toPrefill(out.call.args);
           const meetingAt = await this.preferredSlot(out.call.args, timeZone);
           return { reply: out.text || CALENDAR_REPLY, booking: meetingAt ? { ...booking, meetingAt } : booking };
@@ -108,7 +114,7 @@ export class ChatService {
       }
     } catch (err) {
       logger.error({ err, ip }, 'Chat reply failed');
-      return { reply: OFFLINE_REPLY, offline: true };
+      return offline;
     }
   }
 

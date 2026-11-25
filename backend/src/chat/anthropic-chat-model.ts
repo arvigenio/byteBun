@@ -33,7 +33,9 @@ export class AnthropicChatModel implements ChatModel {
           { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
           ...(context ? [{ type: 'text' as const, text: context }] : []),
         ],
-        tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parametersJsonSchema as Anthropic.Tool.InputSchema })),
+        ...(tools.length
+          ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parametersJsonSchema as Anthropic.Tool.InputSchema })) }
+          : {}),
         messages,
         // Short chat replies: low effort keeps them fast and cheap.
         output_config: { effort: 'low' },
