@@ -348,7 +348,7 @@ function ScanningScreen({ creds, onSignedOut }) {
     session.refetch();
   };
 
-  if (page.isLoading || !page.data) return <Loading />;
+  if (page.isLoading || !page.data) return <Loading screen />;
   const { company, event, scanner, section } = page.data;
   const claiming = section?.kind === 'claimable';
   const undoIt = async (ticketId) => {

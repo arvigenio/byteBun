@@ -5,6 +5,7 @@ import { trackEvent } from '../lib/gtm.js';
 import { leadHref, onRouteLinkClick } from '../lib/router.js';
 import { closed, opened, sendMessage } from '../store/chatSlice.js';
 import { ChatBooking } from './ChatBooking.jsx';
+import { BunFace } from './BouncingBun.jsx';
 import { Confetti } from './Confetti.jsx';
 import { Icon } from './ui/Icon.jsx';
 
@@ -22,7 +23,7 @@ const CHIP_TONES = [
 ];
 const DOT_COLORS = ['bg-bun-orange', 'bg-circuit-teal', 'bg-soft-violet'];
 
-// The website chatbot, Chatbunny: a launcher button and a chat panel. It answers questions and,
+// The website chatbot, Bunno: a launcher button and a chat panel. It answers questions and,
 // when the visitor is ready, shows the booking calendar right in the chat (ChatBooking).
 // On mobile the launcher sits above the sticky bar and the panel fills the screen.
 // Every animation is motion-safe: visitors who prefer reduced motion get the same chat, still.
@@ -101,10 +102,8 @@ export function ChatWidget() {
           <span className="relative grid size-16 place-items-center">
             {/* Pulse ring */}
             <span className="absolute inset-0 rounded-full bg-bun-orange/50 motion-safe:animate-ping" aria-hidden="true" />
-            <span className="relative grid size-16 place-items-center rounded-full bg-linear-to-br from-bun-orange via-honey-gold to-bun-orange text-midnight-plum shadow-xl ring-4 ring-cream-dough transition-transform duration-200 motion-safe:group-hover:scale-110 motion-safe:group-hover:-rotate-6">
-              <span className="motion-safe:animate-hop">
-                <Icon name="bunny" className="size-9" strokeWidth={1.9} />
-              </span>
+            <span className="relative grid size-16 place-items-center rounded-full bg-linear-to-br from-cream-dough via-white to-honey-gold/60 shadow-xl ring-4 ring-bun-orange/70 transition-transform duration-200 motion-safe:group-hover:scale-110 motion-safe:group-hover:-rotate-6">
+              <BunFace size={44} hop />
             </span>
             {!openedAt && (
               <span className="absolute -top-0.5 -right-0.5 grid size-5 place-items-center rounded-full bg-circuit-teal text-[11px] font-bold text-midnight-plum ring-2 ring-cream-dough motion-safe:animate-bounce" aria-hidden="true">
@@ -134,10 +133,8 @@ export function ChatWidget() {
             </span>
             <span className="pointer-events-none absolute -top-10 -left-8 size-28 rounded-full bg-bun-orange/25 blur-2xl motion-safe:animate-drift" aria-hidden="true" />
 
-            <span className="relative grid size-11 flex-none place-items-center rounded-full bg-linear-to-br from-bun-orange to-honey-gold text-midnight-plum shadow-lg ring-2 ring-cream-dough/70">
-              <span className="motion-safe:animate-hop">
-                <Icon name="bunny" className="size-7" strokeWidth={2} />
-              </span>
+            <span className="bb-wiggle relative grid size-11 flex-none place-items-center rounded-full bg-cream-dough shadow-lg ring-2 ring-cream-dough/70">
+              <BunFace size={34} />
             </span>
             <div className="relative min-w-0 flex-1">
               <p className="truncate text-base leading-tight font-bold">
@@ -177,8 +174,8 @@ export function ChatWidget() {
                   </li>
                 ) : (
                   <li key={m.id} className="flex items-end gap-2 motion-safe:animate-msg-left">
-                    <span className="grid size-7 flex-none place-items-center rounded-full bg-linear-to-br from-bun-orange to-honey-gold text-midnight-plum shadow-sm" aria-hidden="true">
-                      <Icon name="bunny" className="size-4.5" strokeWidth={2.2} />
+                    <span className="grid size-7 flex-none place-items-center rounded-full bg-white shadow-sm ring-1 ring-line/70" aria-hidden="true">
+                      <BunFace size={22} blink={false} />
                     </span>
                     <div className="flex min-w-0 max-w-[85%] flex-col items-start">
                       <p
@@ -210,8 +207,8 @@ export function ChatWidget() {
               )}
               {sending && (
                 <li className="flex items-end gap-2 motion-safe:animate-msg-left" aria-label={c.typing}>
-                  <span className="grid size-7 flex-none place-items-center rounded-full bg-linear-to-br from-bun-orange to-honey-gold text-midnight-plum shadow-sm motion-safe:animate-hop" aria-hidden="true">
-                    <Icon name="bunny" className="size-4.5" strokeWidth={2.2} />
+                  <span className="grid size-7 flex-none place-items-center rounded-full bg-white shadow-sm ring-1 ring-line/70" aria-hidden="true">
+                    <BunFace size={22} hop />
                   </span>
                   <span className="flex gap-1.5 rounded-[18px] rounded-bl-md bg-cream-dough px-4 py-3.5 shadow-md ring-1 ring-line/70">
                     {DOT_COLORS.map((color, i) => (

@@ -1,5 +1,6 @@
 // Request bodies of the Bookings API (yup, like the rest of the API). The frontend mirrors these
 // rules in frontend/src/client/lib/schemas.js.
+import { isCurrency } from './money';
 import * as yup from 'yup';
 import { RESERVED_SLUGS } from '../hosts';
 import { isDate, isTimeZone } from './time';
@@ -44,6 +45,8 @@ export const settingsSchema = yup.object({
   businessName: yup.string().trim().min(2).max(120),
   slug: slugField(),
   timeZone: timeZoneField(),
+  /** The business's currency (ISO 4217): the default for event prices and refunds. */
+  currency: yup.string().trim().uppercase().test('currency', 'Please choose a currency.', (v) => v === undefined || isCurrency(v)),
   mode: yup.string().oneOf(['slots', 'date']),
   intervalMinutes: yup.number().integer().min(5, 'At least 5 minutes.').max(480, 'At most 8 hours.'),
   bookersPerSlot: yup.number().integer().min(1, 'At least 1.').max(100, 'At most 100.'),
@@ -182,8 +185,10 @@ export const cancelSchema = yup.object({
 export const inviteSchema = yup.object({
   email: email().required('Please enter an email address.'),
   role: yup.string().oneOf(['owner', 'admin', 'staff'], 'Choose a role.').required(),
+  /** A custom role (staff only). */
+  teamRoleId: yup.number().integer().positive().nullable().default(null),
 });
-export const roleSchema = yup.object({ role: yup.string().oneOf(['owner', 'admin', 'staff']).required() });
+export const roleSchema = yup.object({ role: yup.string().oneOf(['owner', 'admin', 'staff']).required(), teamRoleId: yup.number().integer().positive().nullable().default(null) });
 // The email is the sign-in identity and can't be changed here.
 export const profileSchema = yup.object({
   firstName: firstName(),

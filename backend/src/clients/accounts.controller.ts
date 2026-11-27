@@ -32,7 +32,9 @@ import { ClientsDb } from './clients-db';
 import { CLIENTS_AUTH, ClientRoute, type ClientContext, getClientSession, orgStatus, resolveOrg } from './client-context';
 import { APP_CATALOG, landingOf, loadEntitlements, startPlan } from './entitlements';
 import { surfaceOf } from './hosts';
-import { can, isRole, permissionsOf } from './roles';
+import { isRole, permissionsFor, seesAllEvents, type Role } from './roles';
+
+const ROLE_NAMES: Record<Role, string> = { owner: 'Owner', admin: 'Admin', staff: 'Staff' };
 
 const DEFAULT_HOURS = [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startMinute: 9 * 60, endMinute: 17 * 60 }));
 
@@ -77,12 +79,16 @@ export class AccountsController {
       const e = await loadEntitlements(this.db, active.organizationId);
       const role = isRole(active.role) ? active.role : 'staff';
       const settings = await this.db.bookingSettings.findUnique({ where: { organizationId: active.organizationId }, select: { slug: true, businessName: true } });
+      const custom = role === 'staff' && active.teamRoleId ? await this.db.teamRole.findUnique({ where: { id: active.teamRoleId } }) : null;
       business = {
         id: active.organizationId,
         name: active.organization.name,
         slug: active.organization.slug,
         role,
-        permissions: permissionsOf(role),
+        roleName: custom?.name ?? ROLE_NAMES[role],
+        permissions: permissionsFor(role, custom),
+        // Owners and admins: every event. Everyone else: only the events they're assigned to.
+        allEvents: seesAllEvents(role),
         status: await orgStatus(this.db, active.organizationId),
         plan: { code: e.planCode, name: e.planName },
         apps: APP_CATALOG.map((a) => ({ ...a, enabled: e.apps.includes(a.key) })),
@@ -110,7 +116,9 @@ export class AccountsController {
       firstName: u.firstName ?? '',
       lastName: u.lastName ?? '',
       phone: u.phone ?? '',
-      business: member ? { id: member.organizationId, name: member.organization.name, canEdit: isRole(member.role) && can(member.role, 'team.manage') } : null,
+      business: member
+        ? { id: member.organizationId, name: member.organization.name, canEdit: isRole(member.role) && permissionsFor(member.role, member.role === 'staff' && member.teamRoleId ? await this.db.teamRole.findUnique({ where: { id: member.teamRoleId } }) : null).includes('team.manage') }
+        : null,
     };
   }
 
@@ -179,15 +187,43 @@ export class AccountsController {
   @ClientRoute({ permission: 'team.view' })
   async team(@Req() req: Request) {
     const { org } = ctx(req);
-    const [members, invitations] = await Promise.all([
-      this.db.member.findMany({ where: { organizationId: org.id }, include: { user: { select: { email: true, name: true } } }, orderBy: { createdAt: 'asc' } }),
-      this.db.invitation.findMany({ where: { organizationId: org.id, status: 'pending', expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } }),
+    const [members, invitations, assignments] = await Promise.all([
+      this.db.member.findMany({ where: { organizationId: org.id }, include: { user: { select: { email: true, name: true } }, teamRole: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } }),
+      this.db.invitation.findMany({ where: { organizationId: org.id, status: 'pending', expiresAt: { gt: new Date() } }, include: { teamRole: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } }),
+      this.db.eventMember.groupBy({ by: ['userId'], where: { organizationId: org.id }, _count: { _all: true } }),
     ]);
+    const label = (role: string, custom: { name: string } | null) => (role === 'staff' && custom ? custom.name : ROLE_NAMES[isRole(role) ? role : 'staff']);
     return {
-      members: members.map((m) => ({ id: m.id, userId: m.userId, email: m.user.email, name: m.user.name, role: m.role, since: m.createdAt })),
-      invitations: invitations.map((i) => ({ id: i.id, email: i.email, role: i.role, expiresAt: i.expiresAt })),
+      members: members.map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        email: m.user.email,
+        name: m.user.name,
+        role: m.role,
+        teamRoleId: m.role === 'staff' ? m.teamRoleId : null,
+        roleName: label(m.role, m.teamRole),
+        allEvents: seesAllEvents(isRole(m.role) ? m.role : 'staff'),
+        events: assignments.find((a) => a.userId === m.userId)?._count._all ?? 0,
+        since: m.createdAt,
+      })),
+      invitations: invitations.map((i) => ({ id: i.id, email: i.email, role: i.role, teamRoleId: i.teamRoleId, roleName: label(i.role, i.teamRole), expiresAt: i.expiresAt })),
       seats: ctx(req).entitlements.limits['bookings.staff'] ?? null,
     };
+  }
+
+  /** A custom role for this business (null = none). Only staff can have one. */
+  private async customRole(orgId: string, role: string, teamRoleId: number | null | undefined) {
+    if (!teamRoleId) return null;
+    if (role !== 'staff') throw new ApiError(400, { error: 'validation_failed', message: 'Custom roles are for team members who aren’t owners or admins.', fields: { teamRoleId: 'Not with this role.' } });
+    const r = await this.db.teamRole.findFirst({ where: { id: teamRoleId, organizationId: orgId } });
+    if (!r) throw new ApiError(400, { error: 'validation_failed', message: 'That role doesn’t exist any more.', fields: { teamRoleId: 'Unknown role.' } });
+    return r;
+  }
+
+  /** Only owners and admins hand out the admin role (owners: the owner role too). */
+  private assertCanGrant(c: ClientContext, role: string) {
+    if (role === 'owner' && c.role !== 'owner') throw new ApiError(403, { error: 'forbidden', message: 'Only an owner can make someone an owner.' });
+    if (role === 'admin' && c.role !== 'owner' && c.role !== 'admin') throw new ApiError(403, { error: 'forbidden', message: 'Only owners and admins can make someone an admin.' });
   }
 
   @Post('team/invitations')
@@ -197,6 +233,8 @@ export class AccountsController {
   async invite(@Req() req: Request, @Body(new YupValidationPipe(inviteSchema)) body: yup.InferType<typeof inviteSchema>) {
     const c = ctx(req);
     if (body.role === 'owner' && c.role !== 'owner') throw new ApiError(403, { error: 'forbidden', message: 'Only an owner can invite another owner.' });
+    this.assertCanGrant(c, body.role);
+    const custom = await this.customRole(c.org.id, body.role, body.teamRoleId);
     const existing = await this.db.member.findFirst({ where: { organizationId: c.org.id, user: { email: body.email } } });
     if (existing) throw new ApiError(409, { error: 'validation_failed', message: 'Already on the team.', fields: { email: 'This person is already on the team.' } });
     const seats = c.entitlements.limits['bookings.staff'];
@@ -207,7 +245,10 @@ export class AccountsController {
     const inv = await authCall(() =>
       this.auth.api.createInvitation({ headers: fromNodeHeaders(req.headers), body: { email: body.email, role: body.role, organizationId: c.org.id, resend: true } }),
     );
-    return { ok: true, id: (inv as { id?: string })?.id ?? null };
+    const id = (inv as { id?: string })?.id ?? null;
+    // The custom role they'll get on accepting (Better Auth only knows the three built-in roles).
+    if (id) await this.db.invitation.update({ where: { id }, data: { teamRoleId: custom?.id ?? null } });
+    return { ok: true, id };
   }
 
   @Delete('team/invitations/:id')
@@ -237,10 +278,11 @@ export class AccountsController {
   async setRole(@Req() req: Request, @Param('id') id: string, @Body(new YupValidationPipe(roleSchema)) body: yup.InferType<typeof roleSchema>) {
     const c = ctx(req);
     const m = await this.memberOf(req, id);
-    if (body.role === 'owner' && c.role !== 'owner') throw new ApiError(403, { error: 'forbidden', message: 'Only an owner can make someone an owner.' });
-    if (m.role === body.role) return { ok: true };
-    await this.assertNotLastOwner(c.org.id, m.role);
-    await this.db.member.update({ where: { id: m.id }, data: { role: body.role } });
+    this.assertCanGrant(c, body.role);
+    const custom = await this.customRole(c.org.id, body.role, body.teamRoleId);
+    if (m.role === body.role && (m.teamRoleId ?? null) === (custom?.id ?? null)) return { ok: true };
+    if (m.role !== body.role) await this.assertNotLastOwner(c.org.id, m.role);
+    await this.db.member.update({ where: { id: m.id }, data: { role: body.role, teamRoleId: custom?.id ?? null } });
     return { ok: true };
   }
 
@@ -252,6 +294,8 @@ export class AccountsController {
     await this.assertNotLastOwner(c.org.id, m.role);
     await this.db.$transaction([
       this.db.member.delete({ where: { id: m.id } }),
+      // Off every event of this business (and so its chat rooms).
+      this.db.eventMember.deleteMany({ where: { organizationId: c.org.id, userId: m.userId } }),
       // Signed out of this business right away.
       this.db.session.updateMany({ where: { userId: m.userId, activeOrganizationId: c.org.id }, data: { activeOrganizationId: null } }),
     ]);
@@ -274,7 +318,8 @@ export class AccountsController {
   @ClientRoute({ signedInOnly: true })
   async invitation(@Req() req: Request, @Param('id') id: string) {
     const inv = await this.invitationFor(req, id);
-    return { id: inv.id, businessName: inv.organization.name, role: inv.role, inviter: inv.inviter.name || inv.inviter.email };
+    const custom = inv.role === 'staff' && inv.teamRoleId ? await this.db.teamRole.findUnique({ where: { id: inv.teamRoleId } }) : null;
+    return { id: inv.id, businessName: inv.organization.name, role: inv.role, roleName: custom?.name ?? ROLE_NAMES[isRole(inv.role) ? inv.role : 'staff'], inviter: inv.inviter.name || inv.inviter.email };
   }
 
   @Post('invitations/:id/accept')
@@ -284,6 +329,8 @@ export class AccountsController {
     const inv = await this.invitationFor(req, id);
     if ((await orgStatus(this.db, inv.organizationId)) !== 'active') throw new ApiError(403, { error: 'account_unavailable', message: 'This business is currently unavailable.' });
     await authCall(() => this.auth.api.acceptInvitation({ headers: fromNodeHeaders(req.headers), body: { invitationId: id } }));
+    // Their custom role (staff only), as set when they were invited.
+    if (inv.role === 'staff' && inv.teamRoleId) await this.db.member.updateMany({ where: { organizationId: inv.organizationId, userId: req.clientSession!.user.id }, data: { teamRoleId: inv.teamRoleId } });
     await this.db.session.update({ where: { id: req.clientSession!.sessionId }, data: { activeOrganizationId: inv.organizationId } });
     return { ok: true };
   }

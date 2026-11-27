@@ -95,6 +95,14 @@ export class Mailer {
             socketTimeout: 20_000,
           })
         : null;
+    // Startup check: a wrong password, a blocked port (many VPS hosts block outgoing SMTP) or a
+    // refused From address shows up in the log right away instead of only on the first email.
+    if (this.transporter) {
+      this.transporter
+        .verify()
+        .then(() => logger.info({ host: cfg.mail.host, port: cfg.mail.port, user: cfg.mail.user }, 'SMTP connection OK'))
+        .catch((err: unknown) => logger.error({ host: cfg.mail.host, port: cfg.mail.port, user: cfg.mail.user, reason: err instanceof Error ? err.message : String(err) }, 'SMTP connection FAILED: emails will not be sent'));
+    }
     if (cfg.mail.testingAddress) logger.warn({ testingAddress: cfg.mail.testingAddress }, 'TESTING_EMAIL_ADDRESS is set: every email is delivered to that inbox instead of its recipients');
   }
 

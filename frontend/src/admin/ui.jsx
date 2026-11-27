@@ -1,3 +1,5 @@
+import { BouncingBun } from '../components/BouncingBun.jsx';
+
 // Small building blocks for the admin app, in the site's brand tokens (index.css).
 
 const BTN = {
@@ -116,11 +118,11 @@ export function Badge({ tone = 'neutral', children }) {
   return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${tones[tone]}`}>{children}</span>;
 }
 
-export function Spinner({ label = 'Loading…' }) {
+/** Waiting for a page or a section: the bouncing bun. */
+export function Spinner({ label }) {
   return (
-    <div className="flex items-center gap-3 py-10 text-muted" role="status">
-      <span className="size-5 animate-spin rounded-full border-2 border-soft-violet border-t-transparent" aria-hidden="true" />
-      {label}
+    <div className="grid min-h-[40vh] w-full place-items-center">
+      <BouncingBun label={label === 'Loading…' ? undefined : label} size={60} className="py-0 text-muted" />
     </div>
   );
 }

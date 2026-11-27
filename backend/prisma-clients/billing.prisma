@@ -2,8 +2,7 @@
 // billing: what each client pays for, and therefore what they may use.
 // ============================================================================================
 
-// Plans: free (Bookings freemium), bookings (single app, paid), starter, ... Prices are not
-// stored yet (to be provided).
+// Plans: free (Bookings freemium), bookings (Bookings Pro), premium, growth (starter retired).
 model Plan {
   code      String         @id @db.VarChar(40)
   name      String         @db.VarChar(80)
@@ -17,8 +16,14 @@ model Plan {
   portal    Boolean        @default(false)
   sort      Int            @default(0)
   active    Boolean        @default(true)
+  // Prices in USD cents (the bytebuntech.com pricing). Null = not sold online.
+  priceMonthlyCents Int?   @map("price_monthly_cents")
+  priceYearlyCents  Int?   @map("price_yearly_cents")
+  // Bought from the Plan page (choose, pay, upload a proof). Premium/Growth: free consultation.
+  selfServe Boolean        @default(false) @map("self_serve")
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   subs      Subscription[]
+  payments  PlanPayment[]
 
   @@map("plans")
   @@schema("billing")
@@ -110,5 +115,164 @@ model BillingEvent {
 
   @@index([organizationId, createdAt])
   @@map("events")
+  @@schema("billing")
+}
+
+// ============================================================================================
+// Self-serve plan payments and affiliates (src/clients/affiliates/).
+//
+// A business owner picks a self-serve plan on the Plan page, may enter an affiliate's promo code
+// (a discount), pays Byte Bun through one of the payment channels below and uploads a proof.
+// An admin verifies it on the admin site: approved -> the plan changes and the affiliate's
+// commission (a % of the amount paid) is earned; Byte Bun pays it out and marks it paid.
+// ============================================================================================
+
+// Byte Bun's own ways to be paid (a QR code image, or bank details), shown on the Plan page.
+model PlanPaymentChannel {
+  id            Int      @id @default(autoincrement())
+  // qr | bank
+  type          String   @db.VarChar(10)
+  label         String   @db.VarChar(60)
+  bankName      String?  @map("bank_name") @db.VarChar(80)
+  accountName   String?  @map("account_name") @db.VarChar(120)
+  accountNumber String?  @map("account_number") @db.VarChar(60)
+  qrFile        String?  @map("qr_file") @db.VarChar(64)
+  qrType        String?  @map("qr_type") @db.VarChar(40)
+  position      Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("payment_channels")
+  @@schema("billing")
+}
+
+// An affiliate: one person (by email), in one or more programs: Byte Bun's own (PlanAffiliate:
+// businesses buying plans) and businesses' paid events (booking.event_affiliates). They sign in to
+// the affiliate portal (AFFILIATES_URL) with their email and an emailed code once they've signed
+// up to at least one program (joinedAt).
+model Affiliate {
+  id                  Int                   @id @default(autoincrement())
+  firstName           String                @map("first_name") @db.VarChar(60)
+  lastName            String                @map("last_name") @db.VarChar(60)
+  email               String                @unique @db.VarChar(254)
+  phone               String                @db.VarChar(40)
+  joinedAt            DateTime?             @map("joined_at") @db.Timestamptz(3)
+  // Where commissions are sent (given when signing up). bank | ewallet
+  payoutMethod        String?               @map("payout_method") @db.VarChar(10)
+  payoutProvider      String?               @map("payout_provider") @db.VarChar(80)
+  payoutAccountName   String?               @map("payout_account_name") @db.VarChar(120)
+  payoutAccountNumber String?               @map("payout_account_number") @db.VarChar(60)
+  // Portal sign-in: the emailed 6-digit code (hash), 10 minutes, 5 tries.
+  loginCodeHash       String?               @map("login_code_hash") @db.VarChar(64)
+  loginCodeExpiresAt  DateTime?             @map("login_code_expires_at") @db.Timestamptz(3)
+  loginAttempts       Int                   @default(0) @map("login_attempts")
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  plan                PlanAffiliate?
+  events              EventAffiliate[]
+  sessions            AffiliateSession[]
+  payments            PlanPayment[]
+  commissions         AffiliateCommission[]
+
+  @@map("affiliates")
+  @@schema("billing")
+}
+
+// Byte Bun's own program (admin site, Affiliates tab): the promo code businesses use on a plan
+// payment for `discountPercent` off; the affiliate earns `commissionPercent` of what is paid.
+model PlanAffiliate {
+  id                Int       @id @default(autoincrement())
+  affiliateId       Int       @unique @map("affiliate_id")
+  affiliate         Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  // Upper-case letters and digits, unique. Works only while active.
+  promoCode         String    @unique @map("promo_code") @db.VarChar(20)
+  discountPercent   Decimal   @map("discount_percent") @db.Decimal(5, 2)
+  commissionPercent Decimal   @map("commission_percent") @db.Decimal(5, 2)
+  // invited | active | disabled
+  status            String    @default("invited") @db.VarChar(20)
+  // The sign-up link {AFFILIATES_URL}/join#t=p{id}.{secret}: only the secret's hash is kept.
+  inviteHash        String?   @map("invite_hash") @db.VarChar(64)
+  inviteExpiresAt   DateTime? @map("invite_expires_at") @db.Timestamptz(3)
+  invitedAt         DateTime  @default(now()) @map("invited_at") @db.Timestamptz(3)
+  joinedAt          DateTime? @map("joined_at") @db.Timestamptz(3)
+  note              String?   @db.VarChar(500)
+  createdBy         String    @map("created_by") @db.VarChar(254)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("plan_affiliates")
+  @@schema("billing")
+}
+
+// A signed-in affiliate portal device (cookie token; only its hash is kept). 30 days.
+model AffiliateSession {
+  id          Int       @id @default(autoincrement())
+  affiliateId Int       @map("affiliate_id")
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+
+  @@index([affiliateId])
+  @@map("affiliate_sessions")
+  @@schema("billing")
+}
+
+// One payment for a plan, with its proof. Amounts in cents (USD), fixed when submitted.
+model PlanPayment {
+  id              Int                  @id @default(autoincrement())
+  organizationId  String               @map("organization_id")
+  planCode        String               @map("plan_code") @db.VarChar(40)
+  plan            Plan                 @relation(fields: [planCode], references: [code])
+  // monthly | yearly
+  cycle           String               @db.VarChar(10)
+  currency        String               @default("USD") @db.Char(3)
+  listCents       Int                  @map("list_cents")
+  discountCents   Int                  @default(0) @map("discount_cents")
+  amountCents     Int                  @map("amount_cents")
+  affiliateId     Int?                 @map("affiliate_id")
+  affiliate       Affiliate?           @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
+  promoCode       String?              @map("promo_code") @db.VarChar(20)
+  discountPercent Decimal?             @map("discount_percent") @db.Decimal(5, 2)
+  // review (waiting for Byte Bun) | approved | rejected | cancelled (by the business)
+  status          String               @default("review") @db.VarChar(20)
+  proofFile       String?              @map("proof_file") @db.VarChar(64)
+  proofType       String?              @map("proof_type") @db.VarChar(40)
+  proofName       String?              @map("proof_name") @db.VarChar(200)
+  // Optional: the transfer's reference number, as the business typed it.
+  reference       String?              @db.VarChar(120)
+  submittedBy     String               @map("submitted_by") @db.VarChar(254)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  reviewedAt      DateTime?            @map("reviewed_at") @db.Timestamptz(3)
+  reviewedBy      String?              @map("reviewed_by") @db.VarChar(254)
+  reviewNote      String?              @map("review_note") @db.VarChar(500)
+  commission      AffiliateCommission?
+
+  @@index([status, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("plan_payments")
+  @@schema("billing")
+}
+
+// What an affiliate earns from one payment: pending (payment not verified yet) -> earned
+// (verified) -> paid (Byte Bun sent it). void: the payment was rejected or cancelled.
+model AffiliateCommission {
+  id                Int         @id @default(autoincrement())
+  affiliateId       Int         @map("affiliate_id")
+  affiliate         Affiliate   @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  paymentId         Int         @unique @map("payment_id")
+  payment           PlanPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  organizationId    String      @map("organization_id")
+  commissionPercent Decimal     @map("commission_percent") @db.Decimal(5, 2)
+  amountCents       Int         @map("amount_cents")
+  currency          String      @default("USD") @db.Char(3)
+  status            String      @default("pending") @db.VarChar(20)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  earnedAt          DateTime?   @map("earned_at") @db.Timestamptz(3)
+  paidAt            DateTime?   @map("paid_at") @db.Timestamptz(3)
+  paidBy            String?     @map("paid_by") @db.VarChar(254)
+  payoutReference   String?     @map("payout_reference") @db.VarChar(120)
+
+  @@index([affiliateId, status])
+  @@map("affiliate_commissions")
   @@schema("billing")
 }

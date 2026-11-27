@@ -4,6 +4,7 @@ import { authHttp, useConfigQuery, useMeQuery, useSetActiveBusinessMutation } fr
 import { bookingsBase, go, PRODUCT, signInUrl, surface, welcomeUrl } from './lib/surface.js';
 import { usePathname } from '../lib/router.js';
 import { Button, Icon, ICONS, Loading, NavLink } from './ui.jsx';
+import { useChatLive, useChatUnread } from './lib/chatLive.js';
 
 // Signed-in pages: makes sure there is a session and a business, sends packaged clients to the
 // portal, then renders the shell (standalone Bookings or the client portal) around the page.
@@ -22,7 +23,7 @@ export function AppGate({ shell, app, page, bare = false }) {
     else if (business && shell === 'bookings' && business.landing === 'portal') go(`${cfg.portalUrl}/bookings${window.location.pathname.slice(bookingsBase.length)}${window.location.search}`);
   }, [cfg, status, me.data, business, shell]);
 
-  if (me.isLoading || !cfg || status === 401 || (me.data && !business)) return <Loading />;
+  if (me.isLoading || !cfg || status === 401 || (me.data && !business)) return <Loading screen />;
   if (me.error) return <Centered title="Something went wrong">{me.error.message}</Centered>;
   if (business.status !== 'active') {
     return <Centered title="This account is unavailable">Please contact Byte Bun support for help.</Centered>;
@@ -59,14 +60,16 @@ async function signOut() {
   }
 }
 
+// `need`: the permission the page needs (the API checks again); none = everyone.
 const BOOKINGS_NAV = [
-  { href: '/dashboard', label: 'Dashboard', icon: ICONS.grid },
-  { href: '', label: 'Bookings', icon: ICONS.calendar },
-  { href: '/events', label: 'Events', icon: ICONS.star },
-  { href: '/services', label: 'Services', icon: ICONS.tag },
-  { href: '/schedule', label: 'Schedule', icon: ICONS.clock },
-  { href: '/page', label: 'Booking page', icon: ICONS.palette },
-  { href: '/team', label: 'Team', icon: ICONS.users },
+  { href: '/dashboard', label: 'Dashboard', icon: ICONS.grid, need: 'bookings.view' },
+  { href: '', label: 'Bookings', icon: ICONS.calendar, need: 'bookings.view' },
+  { href: '/events', label: 'Events', icon: ICONS.star, need: 'events.view' },
+  { href: '/chat', label: 'Team chat', icon: ICONS.chat, chat: true },
+  { href: '/services', label: 'Services', icon: ICONS.tag, need: 'bookings.view' },
+  { href: '/schedule', label: 'Schedule', icon: ICONS.clock, need: 'bookings.view' },
+  { href: '/page', label: 'Booking page', icon: ICONS.palette, need: 'bookings.view' },
+  { href: '/team', label: 'Team', icon: ICONS.users, need: 'team.view' },
   { href: '/plan', label: 'Plan', icon: ICONS.star },
   { href: '/account', label: 'Account', icon: ICONS.user },
 ];
@@ -141,7 +144,11 @@ function Shell({ shell, me, cfg, children }) {
   const path = usePathname().replace(/\/+$/, '');
   const [menu, setMenu] = useState(false);
   const inBookings = path === bookingsBase || path.startsWith(`${bookingsBase}/`);
-  const nav = BOOKINGS_NAV.filter((n) => n.href !== '/team' || me.business.permissions.includes('team.view'));
+  const nav = BOOKINGS_NAV.filter((n) => !n.need || me.business.permissions.includes(n.need));
+  // The team chat: live everywhere in the app, unread count in the menu.
+  const chatOn = !!me.business;
+  useChatLive(chatOn);
+  const unread = useChatUnread(chatOn);
   const links = (
     <>
       {shell === 'portal' && (
@@ -154,9 +161,14 @@ function Shell({ shell, me, cfg, children }) {
           const href = `${bookingsBase}${n.href}`;
           return (
             <NavLink key={n.href} href={href} active={n.href ? path.startsWith(href) : path === bookingsBase}>
-              <span className="flex items-center gap-2.5">
+              <span className="flex w-full items-center gap-2.5">
                 <Icon d={n.icon} className="size-[18px]" />
                 {shell === 'portal' ? n.label.replace(/^Bookings$/, 'All bookings') : n.label}
+                {n.chat && unread > 0 && (
+                  <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-brand-ink" aria-label={`${unread} unread`}>
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
               </span>
             </NavLink>
           );
@@ -183,11 +195,6 @@ function Shell({ shell, me, cfg, children }) {
           <span className="mx-1 h-5 w-px bg-line mobile:hidden" />
           <BusinessSwitcher me={me} />
           <div className="ml-auto flex items-center gap-1">
-            {me.business.publicUrl && (
-              <a href={me.business.publicUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted hover:bg-sunken hover:text-ink desktop:flex">
-                View booking page <Icon d={ICONS.external} className="size-4" />
-              </a>
-            )}
             <InstallApp />
             <AppSwitcher business={me.business} cfg={cfg} />
             <Button variant="ghost" size="sm" onClick={signOut} title={me.user.email}>

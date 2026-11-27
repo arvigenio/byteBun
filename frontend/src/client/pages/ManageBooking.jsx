@@ -18,7 +18,7 @@ export function ManageBookingPage() {
   const [result, setResult] = useState(null);
 
   if (!token) return <Message title="This link is not complete">Please open the link from your email again.</Message>;
-  if (q.isLoading) return <Loading />;
+  if (q.isLoading) return <Loading screen />;
   if (q.error) return <Message title="This link is not valid any more">Please use the link in your latest email.</Message>;
   const { state, business, branding, booking } = q.data;
   const tz = business.timeZone;

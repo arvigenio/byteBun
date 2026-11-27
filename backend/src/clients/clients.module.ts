@@ -17,7 +17,18 @@ import { BookingNotifications, MANAGE_TOKENS } from './booking/notifications';
 import { EventClaims, EventScannersController, ScannerController } from './booking/event-scanners';
 import { EventCheckIns, EventLive, EventMails, EventsAdminController, PublicEventsController } from './booking/events';
 import { EventRetentionJob } from './booking/event-retention';
+import { EventMediaController, EventPaymentsController, EventRefunds, PaymentReviewJob, PublicEventFilesController, PublicEventPaymentsController } from './booking/event-payments';
+import { EventRefundRequestsController, PublicRefundRequestsController } from './booking/event-refund-requests';
+import { PaymentFiles } from './booking/payment-files';
+import { EventPromosController, PublicPromoController } from './booking/event-promos';
 import { PlacesController } from './booking/places.controller';
+import { EventAffiliatesController } from './booking/event-affiliates';
+import { AffiliatePortal, AffiliatePortalController } from './affiliates/affiliate-portal';
+import { AffiliatesAdminController, ClientBillingController, PlanChannelsAdminController, PlanPaymentsAdminController, PublicPlanFilesController } from './affiliates/affiliates.controller';
+import { AffiliatesService } from './affiliates/affiliates.service';
+import { EventTeamController, TeamRolesController } from './team/team.controller';
+import { ChatController } from './team/chat.controller';
+import { ChatDigestJob, ChatService } from './team/chat.service';
 import { PublicBookingController } from './booking/public-booking.controller';
 import { RetentionJob } from './booking/retention';
 import { createClientsAuth } from './clients-auth';
@@ -27,7 +38,7 @@ import { CLIENTS_AUTH, ClientGuard } from './client-context';
 
 @Global()
 @Module({
-  controllers: [AccountsController, BookingAdminController, PublicBookingController, EventsAdminController, PublicEventsController, EventScannersController, ScannerController, PlacesController, ClientsAdminController],
+  controllers: [AccountsController, BookingAdminController, PublicBookingController, EventsAdminController, PublicEventsController, EventScannersController, ScannerController, EventPaymentsController, PublicEventPaymentsController, PublicEventFilesController, EventPromosController, PublicPromoController, EventRefundRequestsController, PublicRefundRequestsController, EventMediaController, PlacesController, ClientsAdminController, EventAffiliatesController, AffiliatePortalController, AffiliatesAdminController, PlanPaymentsAdminController, PlanChannelsAdminController, ClientBillingController, PublicPlanFilesController, TeamRolesController, EventTeamController, ChatController],
   providers: [
     ClientsDb,
     ClientGuard,
@@ -39,7 +50,14 @@ import { CLIENTS_AUTH, ClientGuard } from './client-context';
     BookingEngine,
     RetentionJob,
     EventRetentionJob,
+    PaymentFiles,
+    EventRefunds,
+    PaymentReviewJob,
     ClientsAdminService,
+    AffiliatesService,
+    AffiliatePortal,
+    ChatService,
+    ChatDigestJob,
     {
       // The admin site's own, limited login to the clients database when configured
       // (CLIENTS_ADMIN_DB_USER, docs/CLIENTS-DB-ADMIN-USER.sql); else the app's connection.

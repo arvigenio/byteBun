@@ -153,3 +153,31 @@ export const subtaskSchema = yup.object({
 export const subtaskDialogSchema = subtaskSchema.shape({
   status: yup.string().oneOf(TASK_STATUSES, 'Pick a state.').required('Pick a state.'),
 });
+
+// Byte Bun's affiliates (admin Affiliates tab).
+const percentField = (max, label) =>
+  yup
+    .number()
+    .transform((v, raw) => (raw === '' || raw === null ? undefined : v))
+    .typeError('Enter a number.')
+    .min(0, 'At least 0.')
+    .max(max, `At most ${max}.`)
+    .required(`Enter the ${label}.`);
+export const affiliateSchema = yup.object({
+  firstName: yup.string().trim().required('Enter the first name.').max(60),
+  lastName: yup.string().trim().required('Enter the last name.').max(60),
+  email: yup.string().trim().lowercase().required('Enter the email.').email('Enter a valid email address.').max(254),
+  phone: yup
+    .string()
+    .trim()
+    .required('Enter the phone number.')
+    .matches(/^[0-9+()\-.\s]{5,40}$/, 'Enter a valid phone number.'),
+  discountPercent: percentField(99, 'customer discount'),
+  commissionPercent: percentField(100, 'commission'),
+  promoCode: yup
+    .string()
+    .trim()
+    .transform((v) => (typeof v === 'string' ? v.toUpperCase().replace(/[^A-Z0-9]/g, '') : v))
+    .test('code', 'Use 4-20 letters and numbers.', (v) => !v || /^[A-Z0-9]{4,20}$/.test(v)),
+  note: yup.string().trim().max(500),
+});

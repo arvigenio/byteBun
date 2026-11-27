@@ -420,12 +420,12 @@ export const site = {
   // backend/src/chat/knowledge.ts: when prices, plans, or the FAQ above change, update that too.
   chat: {
     launcherLabel: 'Chat with us',
-    launcherHint: 'Questions? Ask Chatbunny',
-    title: 'Chatbunny',
+    launcherHint: 'Questions? Ask Bunno',
+    title: 'Bunno',
     subtitle: 'Byte Bun Tech assistant',
     status: 'Online, replies in seconds',
     closeLabel: 'Close chat',
-    greeting: "Hi! I'm Chatbunny, Byte Bun Tech's assistant. Ask me anything about websites, automations, or pricing, or tell me about your business and I'll show you how we can help.",
+    greeting: "Hi! I'm Bunno, Byte Bun Tech's assistant. Ask me anything about websites, automations, or pricing, or tell me about your business and I'll show you how we can help.",
     // `icon` is a name from components/ui/Icon.jsx.
     starters: [
       { text: 'What do you build?', icon: 'code' },
@@ -435,7 +435,7 @@ export const site = {
     ],
     placeholder: 'Type your question…',
     sendLabel: 'Send',
-    typing: 'Chatbunny is typing',
+    typing: 'Bunno is typing',
     error: 'Sorry, that did not go through. Please try again.',
     retry: 'Try again',
     offlineCta: 'Open the booking page',

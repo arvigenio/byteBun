@@ -6,6 +6,9 @@ dist/
 # Local data (not used by the Compose database, which lives in a Docker volume)
 .data/
 
+# Uploaded files (proofs of payment, payment QR codes; UPLOADS_DIR)
+backend/uploads/
+
 # Secrets
 .env
 .env.*

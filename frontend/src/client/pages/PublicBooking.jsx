@@ -128,7 +128,7 @@ export function PublicBookingPage({ slug }) {
   const [pick, setPick] = useState(null);
   const [done, setDone] = useState(null);
 
-  if (page.isLoading) return <Loading />;
+  if (page.isLoading) return <Loading screen />;
   if (page.error) {
     return (
       <BrandFrame>

@@ -34,7 +34,8 @@ RUN npm run build  && npm prune --omit=dev --no-audit --no-fund  && npm run db:g
 
 # ---- Stage 3: runtime ----
 FROM node:22-alpine
-RUN apk add --no-cache openssl
+# ghostscript: compresses uploaded PDFs (proofs of payment).
+RUN apk add --no-cache openssl ghostscript
 ENV NODE_ENV=production     API_PORT=4000     CHECKPOINT_DISABLE=1
 WORKDIR /app/backend
 # Files stay owned by root (read-only for the app); the process runs as the unprivileged "node" user.
@@ -47,6 +48,8 @@ COPY backend/prisma ./prisma
 COPY backend/prisma-clients ./prisma-clients
 COPY backend/src/database/database-url.ts ./src/database/database-url.ts
 COPY --from=web-build /build/frontend/dist /app/frontend/dist
+# Uploaded files (UPLOADS_DIR default): the one folder the app writes; a volume in production.
+RUN mkdir -p /app/backend/uploads && chown node:node /app/backend/uploads
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5   CMD wget -q -O /dev/null "http://127.0.0.1:${API_PORT}/api/health" || exit 1

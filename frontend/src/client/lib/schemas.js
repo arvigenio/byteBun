@@ -52,6 +52,7 @@ export const serviceSchema = yup.object({
 
 export const rulesSchema = yup.object({
   timeZone: yup.string().required(),
+  currency: yup.string().matches(/^[A-Z]{3}$/, 'Please choose a currency.').required('Please choose a currency.'),
   mode: yup.string().oneOf(['slots', 'date']).required(),
   intervalMinutes: num('Interval', 5, 480).required('Please enter the interval.'),
   bookersPerSlot: num('Bookers per slot', 1, 100).required('Please enter a number.'),
@@ -81,5 +82,6 @@ export const bookingSchema = yup.object({
 
 export const inviteSchema = yup.object({
   email: yup.string().trim().email('Please enter a valid email address.').required('Please enter an email address.'),
-  role: yup.string().oneOf(['owner', 'admin', 'staff']).required(),
+  // owner | admin | staff | role:{id} (a custom role)
+  role: yup.string().matches(/^(owner|admin|staff|role:\d+)$/, 'Choose a role.').required(),
 });

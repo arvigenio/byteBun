@@ -1,8 +1,9 @@
 // Events without a bigger-event voucher (50 participants or fewer, free or paid to attend) are
 // deleted automatically 3 months after they end; the business agrees to this when creating one
 // (events.retentionAgreedAt). Owners and admins get a reminder 7, 3 and 1 days before, and on the
-// day the complete event (CSV + JSON) by email, then it's deleted (registrations, scanners,
-// claimables and claims go with it: database cascade).
+// day the complete event by email (CSV + JSON, and a zip with those, the Excel file and every
+// proof of payment in a folder per attendee), then it's deleted (registrations, scanners,
+// claimables and claims go with it: database cascade) and its uploaded files too.
 //
 // A voucher (or Byte Bun raising the event's limit) stops it: those events have participantLimit.
 // Runs hourly (and a minute after start); tests call run(now) directly.
@@ -13,7 +14,12 @@ import { APP_CONFIG, type AppConfig } from '../../config/config';
 import { logger } from '../../logging/logger';
 import { eventArchivedMail, eventRetentionReminderMail } from '../client-emails';
 import { ClientsDb } from '../clients-db';
-import { eventCsv, eventExportData, retentionOf } from './events';
+import { eventCsv, retentionOf } from './events';
+import { eventZip } from './event-zip';
+import { PaymentFiles } from './payment-files';
+
+/** Most mail servers take about 25 MB per email (attachments grow a third when encoded). */
+const MAX_ZIP_BYTES = 15 * 1024 * 1024;
 import { todayIn } from './time';
 
 const HOUR = 3_600_000;
@@ -30,6 +36,7 @@ export class EventRetentionJob implements OnModuleInit, OnModuleDestroy {
     private readonly db: ClientsDb,
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(APP_CONFIG) private readonly cfg: AppConfig,
+    private readonly files: PaymentFiles,
   ) {}
 
   onModuleInit() {
@@ -89,20 +96,36 @@ export class EventRetentionJob implements OnModuleInit, OnModuleDestroy {
 
   /** The complete event to the owners and admins (CSV + JSON), then it's deleted. */
   private async archiveAndDelete(organizationId: string, eventId: number) {
-    const d = await eventExportData(this.db, organizationId, eventId);
+    const z = await eventZip(this.db, this.files, organizationId, eventId);
+    const d = z.data;
+    const zipOk = z.body.length <= MAX_ZIP_BYTES;
+    if (!zipOk) logger.warn({ organizationId, eventId, bytes: z.body.length }, 'Event zip too big to email; CSV and JSON only');
     const settings = await this.db.bookingSettings.findUnique({ where: { organizationId }, select: { businessName: true } });
     const recipients = await this.recipients(organizationId);
     for (const to of recipients) {
       // Sent before deleting (awaited), so the data is out of our hands first.
       await this.mailer.send(
-        eventArchivedMail(this.cfg, { to, businessName: settings?.businessName ?? '', eventTitle: d.json.event.title, file: d.file, csv: eventCsv(d), json: JSON.stringify(d.json, null, 2), registrations: d.json.event.totals.registered }),
+        eventArchivedMail(this.cfg, { to, businessName: settings?.businessName ?? '', eventTitle: d.json.event.title, file: d.file, csv: eventCsv(d), json: JSON.stringify(d.json, null, 2), registrations: d.json.event.totals.registered, zip: zipOk ? { file: z.file, body: z.body, proofs: z.proofs } : null, zipTooBig: !zipOk }),
       );
     }
+    const [proofs, qrs] = await Promise.all([
+      this.db.eventPaymentProof.findMany({ where: { ticket: { eventId } }, select: { file: true } }),
+      this.db.eventPaymentChannel.findMany({ where: { eventId, qrFile: { not: null } }, select: { qrFile: true } }),
+    ]);
+    const refundQrs = await this.db.eventRefundRequest.findMany({ where: { ticket: { eventId }, qrFile: { not: null } }, select: { qrFile: true } });
+    const media = await this.db.event.findUnique({ where: { id: eventId }, select: { coverFile: true, logoFile: true } });
+    const refundProofs = await this.db.eventRefund.findMany({ where: { ticket: { eventId }, proofFile: { not: null } }, select: { proofFile: true } });
     await this.db.$transaction([
       this.db.event.delete({ where: { id: eventId } }),
       this.db.billingEvent.create({ data: { organizationId, type: 'event_retention_deleted', actor: 'system', data: { eventId, title: d.json.event.title, emailedTo: recipients.length } } }),
     ]);
-    logger.info({ organizationId, eventId }, 'Event deleted by retention (data emailed)');
+    // Its uploads go with it: proofs of payment (already emailed in the zip) and payment QR codes.
+    await this.files.remove('event-proofs', ...proofs.map((p) => p.file));
+    await this.files.remove('event-payment-qr', ...qrs.map((q) => q.qrFile));
+    await this.files.remove('event-refund-details', ...refundQrs.map((q) => q.qrFile));
+    await this.files.remove('event-media', media?.coverFile, media?.logoFile);
+    await this.files.remove('event-refund-proofs', ...refundProofs.map((r) => r.proofFile));
+    logger.info({ organizationId, eventId, files: proofs.length + qrs.length }, 'Event deleted by retention (data emailed)');
     return true;
   }
 }

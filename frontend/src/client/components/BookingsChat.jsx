@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Icon as SiteIcon } from '../../components/ui/Icon.jsx';
+import { BunFace } from '../../components/BouncingBun.jsx';
 import { Icon, ICONS } from '../ui.jsx';
 
 // The chatbot on the Bookings & Events landing page: answers questions about the app.
 // POST /api/chat with product "bookings" (backend/src/chat/chat.service.ts, bookingsPrompt in
 // knowledge.ts): no consultation calendar, nothing stored; the conversation lives in this component.
 const MAX_CHARS = 1000; // MAX_USER_CHARS in backend/src/chat/chat.schema.ts
-const GREETING = "Hi! I'm Chatbunny. Ask me anything about Byte Bun Bookings & Events: booking pages, reminders, events, QR check-in or plans.";
+const GREETING = "Hi! I'm Bunno. Ask me anything about Byte Bun Bookings & Events: booking pages, reminders, events, QR check-in or plans.";
 const STARTERS = ['Is it really free?', 'How do events work?', 'How do QR check-ins work?', 'What does Bookings Pro add?'];
 const FAILED = 'Sorry, something went wrong. Please try again.';
 const BUSY = 'You’re sending messages quickly. Please wait a moment and try again.';
@@ -70,7 +70,9 @@ export function BookingsChat({ start }) {
           aria-label="Ask about Bookings & Events"
           className="fixed right-5 bottom-5 z-40 flex cursor-pointer items-center gap-2 rounded-full bg-brand py-3 pr-5 pl-3.5 font-semibold text-brand-ink shadow-xl shadow-brand/30 transition hover:-translate-y-0.5 hover:brightness-110 mobile:right-4 mobile:bottom-4"
         >
-          <SiteIcon name="bunny" className="size-6" strokeWidth={1.9} />
+          <span className="grid size-8 place-items-center rounded-full bg-white/90">
+            <BunFace size={26} hop />
+          </span>
           Questions?
         </button>
       )}
@@ -78,15 +80,15 @@ export function BookingsChat({ start }) {
       {open && (
         <section
           role="dialog"
-          aria-label="Chatbunny, Bookings & Events assistant"
+          aria-label="Bunno, Bookings & Events assistant"
           className="fixed right-5 bottom-5 z-50 flex h-[min(620px,calc(100dvh-40px))] w-[380px] flex-col overflow-hidden rounded-[20px] border border-line bg-surface text-ink shadow-2xl mobile:inset-0 mobile:h-dvh mobile:w-full mobile:rounded-none mobile:border-0"
         >
           <header className="flex flex-none items-center gap-3 bg-brand px-4 py-3 text-brand-ink">
-            <span className="grid size-10 flex-none place-items-center rounded-full bg-white/15">
-              <SiteIcon name="bunny" className="size-6" strokeWidth={2} />
+            <span className="bb-wiggle grid size-10 flex-none place-items-center rounded-full bg-white">
+              <BunFace size={30} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate leading-tight font-bold">Chatbunny</p>
+              <p className="truncate leading-tight font-bold">Bunno</p>
               <p className="truncate text-xs opacity-85">Bookings & Events assistant</p>
             </div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close chat" className="grid size-9 cursor-pointer place-items-center rounded-full transition hover:bg-white/15">
@@ -120,7 +122,10 @@ export function BookingsChat({ start }) {
                 ),
               )}
               {sending && (
-                <li aria-label="Chatbunny is typing" className="flex">
+                <li aria-label="Bunno is typing" className="flex items-end gap-2">
+                  <span className="grid size-7 flex-none place-items-center rounded-full bg-white shadow-sm ring-1 ring-line" aria-hidden="true">
+                    <BunFace size={22} hop />
+                  </span>
                   <span className="flex gap-1.5 rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3.5">
                     {[0, 1, 2].map((i) => (
                       <span key={i} className="size-2 rounded-full bg-brand motion-safe:animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />

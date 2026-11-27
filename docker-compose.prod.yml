@@ -71,6 +71,7 @@ services:
       BOOKINGS_URL: ${BOOKINGS_URL:-https://bookings.bytebuntech.com}
       PORTAL_URL: ${PORTAL_URL:-https://clientportal.bytebuntech.com}
       SCANNER_URL: ${SCANNER_URL:-https://scanner.bytebuntech.com}
+      AFFILIATES_URL: ${AFFILIATES_URL:-https://affiliates.bytebuntech.com}
       CLIENT_COOKIE_DOMAIN: ${CLIENT_COOKIE_DOMAIN:-.bytebuntech.com}
       CLIENTS_MAIL_FROM: ${CLIENTS_MAIL_FROM:-Byte Bun Bookings <bookings@bytebuntech.com>}
       WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
@@ -79,6 +80,9 @@ services:
       CLIENTS_ADMIN_DB_USER: ${CLIENTS_ADMIN_DB_USER:-}
       CLIENTS_ADMIN_DB_PASSWORD: ${CLIENTS_ADMIN_DB_PASSWORD:-}
       # TESTING_EMAIL_ADDRESS is deliberately not passed: production always emails real recipients.
+    volumes:
+      # Uploaded files (proofs of payment, payment QR codes): kept across rebuilds and redeploys.
+      - uploads-data:/app/backend/uploads
     ports:
       - "127.0.0.1:${APP_PORT:-4000}:4000"
     depends_on:
@@ -104,6 +108,8 @@ services:
     networks: [bytebun]
 
 volumes:
+  uploads-data:
+    name: bytebun-prod_uploads-data
   pg-data:
     # A fixed name (the one Compose already gave it: <project>_pg-data), so the data volume never
     # changes if the project or folder is renamed. Both databases live here: the admin/landing

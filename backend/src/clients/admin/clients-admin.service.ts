@@ -2,22 +2,37 @@
 // reactivate, delete (30-day soft delete) / restore, the permanent purge, and the audit log
 // (billing.events: who, when, reason, for every change).
 //
+// Deleting takes two checks: the admin types the business name, then a 6-digit code emailed to
+// that admin (10 minutes, 5 tries). The purge after the grace period removes everything the
+// business had: bookings, customers, services, events (with their registrations, scanners,
+// claimables, claims and payment channels), vouchers, and the uploaded files (proofs of payment,
+// payment QR codes).
+//
 // It reads and writes the clients database through CLIENTS_ADMIN_DB: the admin site's own,
 // limited login when CLIENTS_ADMIN_DB_USER is set (docs/CLIENTS-DB-ADMIN-USER.sql lists exactly
 // what it may touch), else the app's. Cancelling customers' bookings goes through the booking
 // engine (the app's login), so customers get the usual emails.
+import { createHash, randomInt } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
+import { MAILER } from '../../auth/auth.module';
+import { renderEmail } from '../../auth/email-template';
+import type { Mailer } from '../../auth/mailer';
 import { ApiError } from '../../common/api-error';
 import { APP_CONFIG, type AppConfig } from '../../config/config';
 import { logger } from '../../logging/logger';
 import { BookingEngine } from '../booking/booking-engine';
 import { newCheckInCode } from '../booking/check-in';
 import { BookingNotifications } from '../booking/notifications';
+import { PaymentFiles } from '../booking/payment-files';
 import { type ClientsDb } from '../clients-db';
 import { syncEntitlements } from '../entitlements';
 
 export const CLIENTS_ADMIN_DB = Symbol('CLIENTS_ADMIN_DB');
 export const DELETE_GRACE_DAYS = 30;
+export const DELETE_CODE_MINUTES = 10;
+const DELETE_CODE_TRIES = 5;
+const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
+const normName = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 const notFound = () => new ApiError(404, { error: 'not_found', message: 'That client does not exist.' });
 
@@ -32,7 +47,12 @@ export class ClientsAdminService {
     private readonly engine: BookingEngine,
     private readonly notifications: BookingNotifications,
     @Inject(APP_CONFIG) private readonly cfg: AppConfig,
+    @Inject(MAILER) private readonly mailer: Mailer,
+    private readonly files: PaymentFiles,
   ) {}
+
+  /** Deleting a client: the emailed codes, per client and admin (one process; a restart means asking again). */
+  private readonly deleteCodes = new Map<string, { hash: string; expiresAt: number; attempts: number }>();
 
   /** Owner-level admins may delete. OWNER_ADMIN_EMAILS, or every admin when it isn't set. */
   isOwnerAdmin(email: string) {
@@ -100,8 +120,11 @@ export class ClientsAdminService {
           publicUrl: se.get(o.id) ? `${this.cfg.clients.bookingsUrl}/${se.get(o.id)!.slug}` : null,
         };
       })
+      // Purged clients are gone. Deleted ones (in their grace period) only show on their own
+      // tab (status=deleted), never in the main list.
       .filter((c) => c.status !== 'purged')
-      .filter((c) => !filter.status || c.status === filter.status)
+      .filter((c) => (filter.status === 'deleted' ? c.status === 'deleted' : c.status !== 'deleted'))
+      .filter((c) => !filter.status || filter.status === 'deleted' || c.status === filter.status)
       .filter((c) => !filter.plan || c.plan?.code === filter.plan)
       .filter((c) => !q || c.name.toLowerCase().includes(q) || c.slug.includes(q) || c.owners.some((o) => o.email.includes(q)));
   }
@@ -212,14 +235,64 @@ export class ClientsAdminService {
   }
 
   /** Soft delete: blocked at once, data removed for good after DELETE_GRACE_DAYS. Owner-level admins only. */
-  async remove(id: string, body: { confirmName: string; reason: string; notifyCustomers: boolean; notifyOwner: boolean }, actor: AdminActor) {
+  /** The checks before deleting: an owner-level admin, a client not deleted yet, its exact name. */
+  private async deletable(id: string, confirmName: string, actor: AdminActor) {
     if (!this.isOwnerAdmin(actor.email)) throw new ApiError(403, { error: 'forbidden', message: 'Only owner-level admins can delete clients.' });
     const { org, status } = await this.org(id);
     if (status === 'deleted') throw new ApiError(409, { error: 'deleted', message: 'This client is already deleted.' });
-    const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
-    if (norm(body.confirmName) !== norm(org.name)) {
+    if (normName(confirmName) !== normName(org.name)) {
       throw new ApiError(400, { error: 'validation_failed', message: 'Type the business name exactly to confirm.', fields: { confirmName: `Type “${org.name}” to confirm.` } });
     }
+    return org;
+  }
+
+  /** Step 1 of deleting: the name typed, a 6-digit code emailed to the admin asking. */
+  async requestDeleteCode(id: string, body: { confirmName: string }, actor: AdminActor) {
+    const org = await this.deletable(id, body.confirmName, actor);
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    this.deleteCodes.set(`${id}|${actor.email.toLowerCase()}`, { hash: sha256(`${id}:${code}`), expiresAt: Date.now() + DELETE_CODE_MINUTES * 60_000, attempts: 0 });
+    const [events, bookings] = await Promise.all([this.db.event.count({ where: { organizationId: id } }), this.db.booking.count({ where: { organizationId: id } })]);
+    const { html, text } = renderEmail({
+      preheader: `Your code to delete ${org.name}: ${code}`,
+      label: 'Delete a client',
+      tone: 'danger',
+      title: `Confirm deleting “${org.name}”`,
+      intro: [`You asked to delete the client “${org.name}”. Enter this code in the confirmation window to continue.`],
+      code,
+      codeNote: `This code expires in ${DELETE_CODE_MINUTES} minutes and works once.`,
+      details: [
+        ['Client', org.name],
+        ['Bookings', String(bookings)],
+        ['Events', String(events)],
+        ['Asked by', actor.email],
+      ],
+      callout: { tone: 'warning', title: 'What happens', text: `The client is signed out and stops working now. After ${DELETE_GRACE_DAYS} days everything is removed for good: bookings, customers, services, events with their registrations and scanners, and uploaded files (proofs of payment, QR codes).` },
+      footer: 'Sent to Byte Bun administrators only. If you didn’t ask for this, ignore it: nothing is deleted without the code.',
+    });
+    this.mailer.sendInBackground({ to: actor.email, subject: `Code to delete “${org.name}”: ${code}`, text, html });
+    logger.warn({ org: id, by: actor.email }, 'Client delete code sent');
+    return { sentTo: actor.email, minutes: DELETE_CODE_MINUTES };
+  }
+
+  /** Step 2: the code from the email (wrong 5 times or 10 minutes late: ask again). */
+  private checkDeleteCode(id: string, code: string, actor: AdminActor) {
+    const key = `${id}|${actor.email.toLowerCase()}`;
+    const entry = this.deleteCodes.get(key);
+    if (!entry || entry.expiresAt <= Date.now() || entry.attempts >= DELETE_CODE_TRIES) {
+      this.deleteCodes.delete(key);
+      throw new ApiError(410, { error: 'code_expired', message: 'This code has expired. Ask for a new one.', fields: { code: 'Expired: ask for a new code.' } });
+    }
+    if (sha256(`${id}:${code}`) !== entry.hash) {
+      entry.attempts++;
+      const left = DELETE_CODE_TRIES - entry.attempts;
+      throw new ApiError(400, { error: 'bad_code', message: left > 0 ? `That code isn’t right. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Too many wrong codes. Ask for a new one.', fields: { code: 'Wrong code.' } });
+    }
+    this.deleteCodes.delete(key);
+  }
+
+  async remove(id: string, body: { confirmName: string; code: string; reason: string; notifyCustomers: boolean; notifyOwner: boolean }, actor: AdminActor) {
+    const org = await this.deletable(id, body.confirmName, actor);
+    this.checkDeleteCode(id, body.code, actor);
     const deleteAfter = new Date(Date.now() + DELETE_GRACE_DAYS * 86_400_000);
     await this.db.accountStatus.upsert({
       where: { organizationId: id },
@@ -308,8 +381,21 @@ export class ClientsAdminService {
     const due = await this.db.accountStatus.findMany({ where: { status: 'deleted', deleteAfter: { lte: now } } });
     for (const { organizationId: id } of due) {
       const members = await this.db.member.findMany({ where: { organizationId: id }, select: { userId: true } });
+      // Uploaded files, noted before their rows go.
+      const planProofs = await this.db.planPayment.findMany({ where: { organizationId: id, proofFile: { not: null } }, select: { proofFile: true } });
+      const chatFiles = await this.db.chatMessage.findMany({ where: { organizationId: id, file: { not: null } }, select: { file: true } });
+      const [proofs, refundQrs, media, refundProofs, qrs] = await Promise.all([
+        this.db.eventPaymentProof.findMany({ where: { organizationId: id }, select: { file: true } }),
+        this.db.eventRefundRequest.findMany({ where: { organizationId: id, qrFile: { not: null } }, select: { qrFile: true } }),
+        this.db.event.findMany({ where: { organizationId: id }, select: { coverFile: true, logoFile: true } }),
+        this.db.eventRefund.findMany({ where: { organizationId: id, proofFile: { not: null } }, select: { proofFile: true } }),
+        this.db.eventPaymentChannel.findMany({ where: { organizationId: id, qrFile: { not: null } }, select: { qrFile: true } }),
+      ]);
       await this.db.$transaction(async (tx) => {
         await tx.notification.deleteMany({ where: { organizationId: id } });
+        // Events: their registrations, claims, claimables, scanners and payment channels cascade.
+        await tx.eventVoucher.deleteMany({ where: { organizationId: id } });
+        await tx.event.deleteMany({ where: { organizationId: id } });
         await tx.booking.deleteMany({ where: { organizationId: id } });
         await tx.customer.deleteMany({ where: { organizationId: id } });
         await tx.service.deleteMany({ where: { organizationId: id } });
@@ -319,13 +405,25 @@ export class ClientsAdminService {
         await tx.bookingSettings.deleteMany({ where: { organizationId: id } });
         await tx.entitlement.deleteMany({ where: { organizationId: id } });
         await tx.subscription.deleteMany({ where: { organizationId: id } }); // add-ons cascade
+        // The team chat (event rooms also go with their events).
+        await tx.chatRoom.deleteMany({ where: { organizationId: id } });
         await tx.organization.delete({ where: { id } }); // members and invitations cascade
+        await tx.teamRole.deleteMany({ where: { organizationId: id } }); // after the members who had them
         // People who belonged only to this business have nothing left: remove their account too.
         await tx.user.deleteMany({ where: { id: { in: members.map((m) => m.userId) }, members: { none: {} } } });
         await tx.accountStatus.update({ where: { organizationId: id }, data: { status: 'purged', changedAt: now, changedBy: 'system' } });
+        // Plan payments (and affiliates' commissions on them) are kept as billing records, without their proofs.
+        await tx.planPayment.updateMany({ where: { organizationId: id }, data: { proofFile: null } });
         // The audit trail (billing.events) is kept.
-        await tx.billingEvent.create({ data: { organizationId: id, type: 'purged', actor: 'system', data: {} } });
+        await tx.billingEvent.create({ data: { organizationId: id, type: 'purged', actor: 'system', data: { files: proofs.length + qrs.length } } });
       });
+      await this.files.remove('event-proofs', ...proofs.map((p) => p.file));
+      await this.files.remove('event-payment-qr', ...qrs.map((q) => q.qrFile));
+      await this.files.remove('event-refund-details', ...refundQrs.map((q) => q.qrFile));
+      await this.files.remove('event-media', ...media.flatMap((m) => [m.coverFile, m.logoFile]));
+      await this.files.remove('event-refund-proofs', ...refundProofs.map((r) => r.proofFile));
+      await this.files.remove('plan-proofs', ...planProofs.map((p) => p.proofFile));
+      await this.files.remove('chat-files', ...chatFiles.map((m) => m.file));
       logger.warn({ org: id }, 'Client permanently removed');
     }
     return due.length;

@@ -207,6 +207,7 @@ export class BookingAdminController {
     return {
       businessName: settings.businessName,
       timeZone: settings.timeZone,
+      currency: settings.currency,
       publicUrl: `${this.cfg.clients.bookingsUrl}/${settings.slug}`,
       usage: { used, limit: limitOf(c.entitlements, 'bookings.monthly') },
       upcoming,

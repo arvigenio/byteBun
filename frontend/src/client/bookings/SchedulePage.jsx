@@ -2,6 +2,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import { CurrencyOptions } from '../components/Money.jsx';
 import { useBlockedQuery, useBlockMutation, useMeQuery, useSaveHoursMutation, useSaveSettingsMutation, useServicesQuery, useSettingsQuery, useUnblockMutation } from '../api.js';
 import { addDays, fmtDate, fmtLongDate, fmtTime, minuteLabel, timeZones, todayIn, WEEKDAYS } from '../lib/format.js';
 import { rulesSchema } from '../lib/schemas.js';
@@ -419,6 +420,7 @@ function RulesCard({ data, edit }) {
   const [outside, setOutside] = useState(null);
   const defaults = {
     timeZone: s.timeZone,
+    currency: s.currency ?? 'PHP',
     mode: s.mode,
     intervalMinutes: s.intervalMinutes,
     bookersPerSlot: s.bookersPerSlot,
@@ -568,8 +570,8 @@ function RulesCard({ data, edit }) {
           </Field>
         </Section>
 
-        <Section title="Time zone">
-          <Field label="Business time zone" hint="Customers see times in this zone." error={err('timeZone')} className="desktop:col-span-2">
+        <Section title="Time zone and currency">
+          <Field label="Business time zone" hint="Customers see times in this zone. New events start in it too." error={err('timeZone')}>
             {(a) => (
               <Select {...a} {...register('timeZone')}>
                 {zones.map((z) => (
@@ -577,6 +579,13 @@ function RulesCard({ data, edit }) {
                     {z.replace(/_/g, ' ')}
                   </option>
                 ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Currency" hint="The default for event prices and refunds. You can still pick another each time." error={err('currency')}>
+            {(a) => (
+              <Select {...a} {...register('currency')}>
+                <CurrencyOptions />
               </Select>
             )}
           </Field>

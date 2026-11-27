@@ -9,6 +9,9 @@ model BookingSettings {
   businessName        String   @map("business_name") @db.VarChar(120)
   // IANA zone, e.g. America/Toronto.
   timeZone            String   @map("time_zone") @db.VarChar(64)
+  /// The business's currency (ISO 4217): the default wherever a currency is chosen (event prices,
+  /// refunds). Its time zone above is the default for time zones.
+  currency            String   @default("PHP") @db.Char(3)
   // slots | date (no interval: customers pick a day, first come first served)
   mode                String   @default("slots") @db.VarChar(10)
   intervalMinutes     Int      @default(30) @map("interval_minutes")
@@ -224,7 +227,15 @@ model Event {
   description    String?       @db.VarChar(20000)
   /// free | paid
   kind           String        @default("free") @db.VarChar(8)
-  /// Shown on the page for paid events, e.g. "₱1,500" (no payment is taken here).
+  /// Paid events: the price (required), in `currency` (ISO 4217, e.g. PHP). priceLabel is it
+  /// formatted for the page and emails, e.g. "₱1,500" (no payment is taken here).
+  /// The event page's cover photo and logo (images in UPLOADS_DIR/event-media/, public).
+  coverFile      String?       @map("cover_file") @db.VarChar(80)
+  coverType      String?       @map("cover_type") @db.VarChar(40)
+  logoFile       String?       @map("logo_file") @db.VarChar(80)
+  logoType       String?       @map("logo_type") @db.VarChar(40)
+  price          Decimal?      @db.Decimal(12, 2)
+  currency       String?       @db.Char(3)
   priceLabel     String?       @map("price_label") @db.VarChar(60)
   startsAt       DateTime      @map("starts_at") @db.Timestamptz(3)
   endsAt         DateTime      @map("ends_at") @db.Timestamptz(3)
@@ -247,7 +258,7 @@ model Event {
   participantLimit Int?    @map("participant_limit")
   /// Open for registration (and the page is public).
   published      Boolean       @default(false)
-  /// The registration button's text (default: "Register for free" / "Confirm my place").
+  /// The registration button's text (default: "Register for free" / "Register").
   registerLabel  String?       @map("register_label") @db.VarChar(40)
   /// Deleting the event: SHA-256 of the 6-digit code emailed to the person asking, until when,
   /// who asked, and wrong tries so far (5 at most).
@@ -265,6 +276,11 @@ model Event {
   scanners       EventScanner[]
   claimables     EventClaimable[]
   vouchers       EventVoucher[]
+  paymentChannels EventPaymentChannel[]
+  promoCodes     EventPromoCode[]
+  affiliates     EventAffiliate[]
+  team           EventMember[]
+  chatRoom       ChatRoom?
 
   @@unique([organizationId, slug])
   @@index([organizationId, startsAt])
@@ -282,24 +298,60 @@ model EventTicket {
   name           String    @db.VarChar(120)
   email          String    @db.VarChar(254)
   phone          String?   @db.VarChar(40)
-  code           String    @db.Char(8)
-  /// pending (paid: code given, not used yet) | confirmed | revoked (by the business) | cancelled (by the attendee, free events)
+  /// The check-in code. Paid registrations get one only once the payment is confirmed.
+  code           String?   @db.Char(8)
+  /// pending (paid: code given, not used yet) | reserved (paid: spots held 2 hours for the proof, reuploadBy)
+  /// | waitlist (paid, full: offered a freed spot in order) | review (paid: proof of payment uploaded, to verify)
+  /// | rejected (paid: proof not accepted; re-upload by reuploadBy or the place is freed)
+  /// | confirmed | revoked (by the business) | cancelled (by the attendee, free events)
   status         String    @default("confirmed") @db.VarChar(10)
   /// Behind the attendee's private cancel link (free events): /{business}/e/{event}#cancel={id}.{nonce}
   manageNonce    String    @default(dbgenerated("md5((random())::text || (clock_timestamp())::text)")) @map("manage_nonce") @db.Char(32)
   cancelledAt    DateTime? @map("cancelled_at") @db.Timestamptz(3)
-  /// public (registered on the page) | business (code issued by the business)
+  /// public (registered on the page) | payment (with a proof of payment) | business (code issued
+  /// by the business) | manual (registered by the business, paid to them directly or free)
   source         String    @default("public") @db.VarChar(10)
+  /// Paid events, once confirmed: what they paid (the Collections tab). proof | code | manual | free
+  paymentMethod  String?   @map("payment_method") @db.VarChar(10)
+  amountPaid     Decimal?  @map("amount_paid") @db.Decimal(12, 2)
+  paidCurrency   String?   @map("paid_currency") @db.Char(3)
+  paidAt         DateTime? @map("paid_at") @db.Timestamptz(3)
+  /// The promo code used for this place (snapshot) and its discount, in the event's currency.
+  promoCodeId    Int?      @map("promo_code_id")
+  promo          EventPromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  promoCode      String?   @map("promo_code") @db.VarChar(30)
+  discount       Decimal?  @db.Decimal(12, 2)
+  /// Bulk bookings: the places booked together (one name and email, one proof of payment, verified
+  /// together) share a group id; groupSize is how many.
+  groupId        String?   @map("group_id") @db.VarChar(36)
+  groupSize      Int?      @map("group_size")
   confirmedAt    DateTime? @map("confirmed_at") @db.Timestamptz(3)
   revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
   revokeReason   String?   @map("revoke_reason") @db.VarChar(500)
   checkedInAt    DateTime? @map("checked_in_at") @db.Timestamptz(3)
   checkedInBy    String?   @map("checked_in_by")
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Why a new proof is asked for (emailed to the attendee).
+  paymentNote       String?   @map("payment_note") @db.VarChar(500)
+  /// Status "rejected" (waiting for a proof): replace (another proof instead of the last one) |
+  /// additional (an extra proof, e.g. the rest of an insufficient amount: amountDue).
+  proofRequest      String?   @map("proof_request") @db.VarChar(12)
+  amountDue         String?   @map("amount_due") @db.VarChar(60)
+  /// The current upload link's secret (SHA-256): a new one for every request, cleared once used.
+  uploadTokenHash   String?   @map("upload_token_hash") @db.Char(64)
+  /// Waiting for a proof: the attendee may upload until then; after it, the place is freed.
+  reuploadBy        DateTime? @map("reupload_by") @db.Timestamptz(3)
+  paymentReviewedAt DateTime? @map("payment_reviewed_at") @db.Timestamptz(3)
+  paymentReviewedBy String?   @map("payment_reviewed_by") @db.VarChar(200)
   claims         EventClaim[]
+  proofs         EventPaymentProof[]
+  refunds        EventRefund[]
+  logs           EventTicketLog[]
+  refundRequests EventRefundRequest[]
 
   @@unique([organizationId, code])
   @@index([eventId, status])
+  @@index([groupId])
   @@map("event_tickets")
   @@schema("booking")
 }
@@ -406,5 +458,311 @@ model EventClaim {
   @@index([ticketId])
   @@index([scannerId])
   @@map("event_claims")
+  @@schema("booking")
+}
+
+// How attendees pay for a paid event (up to 4, shown on the registration form): a QR code image
+// (in UPLOADS_DIR/event-payment-qr/) or bank details.
+model EventPaymentChannel {
+  id             Int      @id @default(autoincrement())
+  eventId        Int      @map("event_id")
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId String   @map("organization_id")
+  position       Int      @default(0)
+  /// qr | bank
+  type           String   @db.VarChar(10)
+  /// e.g. "GCash", "Maya", "BDO savings"
+  label          String   @db.VarChar(60)
+  bankName       String?  @map("bank_name") @db.VarChar(100)
+  accountName    String?  @map("account_name") @db.VarChar(120)
+  accountNumber  String?  @map("account_number") @db.VarChar(60)
+  qrFile         String?  @map("qr_file") @db.VarChar(80)
+  qrType         String?  @map("qr_type") @db.VarChar(40)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([eventId])
+  @@map("event_payment_channels")
+  @@schema("booking")
+}
+
+// A proof of payment (image or PDF) in UPLOADS_DIR/event-proofs/. A registration may have several
+// (an additional proof for an insufficient amount, or replaced ones). Every file is kept, with its
+// outcome, until the event is deleted (by the business, or automatically: then the files are
+// emailed in the event's zip first).
+model EventPaymentProof {
+  id             Int         @id @default(autoincrement())
+  ticketId       Int         @map("ticket_id")
+  ticket         EventTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  organizationId String      @map("organization_id")
+  file           String      @db.VarChar(80)
+  name           String      @db.VarChar(200)
+  type           String      @db.VarChar(40)
+  size           Int
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// What became of it (null = current, being verified): replaced | approved | rejected |
+  /// refunded | expired | removed. The file is kept until the event is deleted.
+  outcomeAt      DateTime?   @map("outcome_at") @db.Timestamptz(3)
+  outcome        String?     @db.VarChar(20)
+
+  @@index([ticketId])
+  @@map("event_payment_proofs")
+  @@schema("booking")
+}
+
+// A refund the business made (by hand) and told the attendee about. The proof of refund is
+// emailed to the attendee and kept (proofFile) until the event is deleted.
+model EventRefund {
+  id             Int         @id @default(autoincrement())
+  ticketId       Int         @map("ticket_id")
+  ticket         EventTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  organizationId String      @map("organization_id")
+  /// full | partial (an excess amount paid back)
+  type           String      @db.VarChar(10)
+  /// The amount refunded, in `currency`; `amount` is it formatted, e.g. "₱50".
+  amountValue    Decimal?    @map("amount_value") @db.Decimal(12, 2)
+  currency       String?     @db.Char(3)
+  amount         String?     @db.VarChar(60)
+  /// Full refunds: the registration was cancelled too.
+  cancelled      Boolean     @default(false)
+  note           String?     @db.VarChar(500)
+  proofName      String?     @map("proof_name") @db.VarChar(200)
+  /// The proof of refund, kept in UPLOADS_DIR/event-refund-proofs/ until the event is deleted.
+  proofFile      String?     @map("proof_file") @db.VarChar(80)
+  proofType      String?     @map("proof_type") @db.VarChar(40)
+  createdBy      String      @map("created_by") @db.VarChar(200)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId])
+  @@map("event_refunds")
+  @@schema("booking")
+}
+
+// A registration's activity log: every action on it, who did it and when (registered, proof
+// uploaded, payment approved, proof requested, refunded, checked in, claimed, revoked...).
+model EventTicketLog {
+  id             Int         @id @default(autoincrement())
+  ticketId       Int         @map("ticket_id")
+  ticket         EventTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  organizationId String      @map("organization_id")
+  action         String      @db.VarChar(30)
+  /// Who: a staff member's name, a scanner, "Attendee" or "System".
+  by             String?     @db.VarChar(200)
+  detail         String?     @db.VarChar(500)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId, createdAt])
+  @@map("event_ticket_logs")
+  @@schema("booking")
+}
+
+// A paid event's promo code: an amount or a percentage off, per place. usageLimit: how many
+// places can use it (1 = one-time, null = unlimited); used counts them. Optional expiry.
+model EventPromoCode {
+  id             Int           @id @default(autoincrement())
+  eventId        Int           @map("event_id")
+  event          Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId String        @map("organization_id")
+  /// Upper case, e.g. EARLYBIRD
+  code           String        @db.VarChar(30)
+  /// amount | percent
+  discountType   String        @map("discount_type") @db.VarChar(10)
+  discountValue  Decimal       @map("discount_value") @db.Decimal(12, 2)
+  usageLimit     Int?          @map("usage_limit")
+  used           Int           @default(0)
+  expiresAt      DateTime?     @map("expires_at") @db.Timestamptz(3)
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  tickets        EventTicket[]
+  /// Set when this is an event affiliate's code (managed on the Affiliates tab, not Promo codes).
+  affiliate      EventAffiliate?
+
+  @@unique([eventId, code])
+  @@map("event_promo_codes")
+  @@schema("booking")
+}
+
+// A paid event's affiliate (up to 5 per event; the event's Affiliates tab). The business sets the
+// attendee discount (their promo code: a percentage off, unlimited uses) and the commission (a %
+// of what each attendee paid). A spot counts once its payment is verified (status confirmed); the
+// business pays the affiliate and records it (EventAffiliatePayout).
+model EventAffiliate {
+  id                Int                    @id @default(autoincrement())
+  eventId           Int                    @map("event_id")
+  event             Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId    String                 @map("organization_id")
+  affiliateId       Int                    @map("affiliate_id")
+  affiliate         Affiliate              @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  /// As the business entered them (the person's own profile may differ).
+  firstName         String                 @map("first_name") @db.VarChar(60)
+  lastName          String                 @map("last_name") @db.VarChar(60)
+  email             String                 @db.VarChar(254)
+  phone             String                 @db.VarChar(40)
+  promoCodeId       Int                    @unique @map("promo_code_id")
+  promo             EventPromoCode         @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  commissionPercent Decimal                @map("commission_percent") @db.Decimal(5, 2)
+  /// invited | active | disabled (the promo code works only while active)
+  status            String                 @default("invited") @db.VarChar(20)
+  /// The sign-up link {AFFILIATES_URL}/join#t=e{id}.{secret}: only the secret's hash is kept.
+  inviteHash        String?                @map("invite_hash") @db.VarChar(64)
+  inviteExpiresAt   DateTime?              @map("invite_expires_at") @db.Timestamptz(3)
+  invitedAt         DateTime               @default(now()) @map("invited_at") @db.Timestamptz(3)
+  joinedAt          DateTime?              @map("joined_at") @db.Timestamptz(3)
+  createdBy         String                 @map("created_by") @db.VarChar(254)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  payouts           EventAffiliatePayout[]
+
+  @@unique([eventId, affiliateId])
+  @@index([affiliateId])
+  @@map("event_affiliates")
+  @@schema("booking")
+}
+
+// Money the business sent an event affiliate (their earned commission), in the event's currency.
+model EventAffiliatePayout {
+  id               Int            @id @default(autoincrement())
+  eventAffiliateId Int            @map("event_affiliate_id")
+  eventAffiliate   EventAffiliate @relation(fields: [eventAffiliateId], references: [id], onDelete: Cascade)
+  amount           Decimal        @db.Decimal(12, 2)
+  currency         String         @db.Char(3)
+  reference        String?        @db.VarChar(120)
+  createdBy        String         @map("created_by") @db.VarChar(254)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("event_affiliate_payouts")
+  @@schema("booking")
+}
+
+// A refund request: the business asks the attendee where to send their money (a unique emailed
+// link); they upload a QR code or enter bank details; the business pays them, then marks it
+// completed with the proof of refund (emailed to them; the refund is recorded then).
+model EventRefundRequest {
+  id             Int         @id @default(autoincrement())
+  ticketId       Int         @map("ticket_id")
+  ticket         EventTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  organizationId String      @map("organization_id")
+  /// full (what hasn't been refunded yet) | partial (amountValue)
+  type           String      @db.VarChar(10)
+  amountValue    Decimal?    @map("amount_value") @db.Decimal(12, 2)
+  currency       String?     @db.Char(3)
+  /// Full refunds: cancel the registration when completed.
+  cancel         Boolean     @default(false)
+  /// A bulk booking: the request covers every spot of the ticket's group.
+  wholeBooking   Boolean     @default(false) @map("whole_booking")
+  note           String?     @db.VarChar(500)
+  /// waiting (link sent) | submitted (details received) | completed | cancelled
+  status         String      @default("waiting") @db.VarChar(10)
+  tokenHash      String?     @map("token_hash") @db.Char(64)
+  /// What the attendee gave: qr (an image in UPLOADS_DIR/event-refund-details/) | bank
+  method         String?     @db.VarChar(10)
+  bankName       String?     @map("bank_name") @db.VarChar(100)
+  accountName    String?     @map("account_name") @db.VarChar(120)
+  accountNumber  String?     @map("account_number") @db.VarChar(60)
+  qrFile         String?     @map("qr_file") @db.VarChar(80)
+  qrType         String?     @map("qr_type") @db.VarChar(40)
+  submittedAt    DateTime?   @map("submitted_at") @db.Timestamptz(3)
+  completedAt    DateTime?   @map("completed_at") @db.Timestamptz(3)
+  completedBy    String?     @map("completed_by") @db.VarChar(200)
+  refundId       Int?        @map("refund_id")
+  createdBy      String      @map("created_by") @db.VarChar(200)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId])
+  @@map("event_refund_requests")
+  @@schema("booking")
+}
+
+// ============================================================================================
+// Team: custom roles, who works on which event, and the team chat (src/clients/team/).
+// ============================================================================================
+
+// A custom role (Team page): a name and permissions from src/clients/roles.ts PERMISSION_CATALOG.
+// Members on it are staff (members.role) with members.team_role_id set.
+model TeamRole {
+  id             Int          @id @default(autoincrement())
+  organizationId String       @map("organization_id")
+  name           String       @db.VarChar(40)
+  permissions    String[]
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members        Member[]
+  invitations    Invitation[]
+
+  @@unique([organizationId, name])
+  @@map("team_roles")
+  @@schema("booking")
+}
+
+// A team member assigned to an event. Everyone except owners and admins sees only the events
+// they're assigned to (and those events' chat rooms).
+model EventMember {
+  eventId        Int      @map("event_id")
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  assignedBy     String   @map("assigned_by") @db.VarChar(254)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([eventId, userId])
+  @@index([organizationId, userId])
+  @@map("event_members")
+  @@schema("booking")
+}
+
+// A chat room: the whole team (one per business), an event's (its assigned members, owners and
+// admins), or a direct conversation between two members. `key` makes each one unique:
+// team:{org} | event:{eventId} | dm:{org}:{userA}:{userB} (user ids sorted).
+model ChatRoom {
+  id             Int           @id @default(autoincrement())
+  organizationId String        @map("organization_id")
+  key            String        @unique @db.VarChar(200)
+  /// team | event | direct
+  kind           String        @db.VarChar(10)
+  eventId        Int?          @unique @map("event_id")
+  event          Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userA          String?       @map("user_a")
+  userB          String?       @map("user_b")
+  lastMessageAt  DateTime?     @map("last_message_at") @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  messages       ChatMessage[]
+  reads          ChatRead[]
+
+  @@index([organizationId, kind])
+  @@map("chat_rooms")
+  @@schema("booking")
+}
+
+// A message: text and/or one attachment (an image or PDF in UPLOADS_DIR/chat-files/, private).
+model ChatMessage {
+  id             Int       @id @default(autoincrement())
+  roomId         Int       @map("room_id")
+  room           ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  organizationId String    @map("organization_id")
+  userId         String    @map("user_id")
+  body           String    @default("") @db.VarChar(4000)
+  file           String?   @db.VarChar(64)
+  fileType       String?   @map("file_type") @db.VarChar(40)
+  fileName       String?   @map("file_name") @db.VarChar(200)
+  fileSize       Int?      @map("file_size")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Deleted by its author: the text and file are removed, the row stays as "deleted".
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  @@index([roomId, id])
+  @@map("chat_messages")
+  @@schema("booking")
+}
+
+// How far a member has read a room, and up to which message they were emailed about (offline).
+model ChatRead {
+  roomId     Int      @map("room_id")
+  room       ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId     String   @map("user_id")
+  lastReadId Int      @default(0) @map("last_read_id")
+  notifiedId Int      @default(0) @map("notified_id")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([roomId, userId])
+  @@index([userId])
+  @@map("chat_reads")
   @@schema("booking")
 }

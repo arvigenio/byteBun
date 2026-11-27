@@ -81,7 +81,7 @@ const FEATURES = [
 // Events: one-time seminars, webinars and classes (booking/events.ts).
 const EVENT_FEATURES = [
   { icon: ICONS.star, title: 'An event page in minutes', text: 'A step-by-step setup: name, description, date and time zone, onsite with a map pin or online, and how many can join.' },
-  { icon: ICONS.tag, title: 'Free or paid', text: 'Free events: anyone registers. Paid: you collect the payment and give each person a code to confirm their place.' },
+  { icon: ICONS.tag, title: 'Free or paid', text: 'Free events: anyone registers. Paid: show your QR codes or bank details, and approve each proof of payment before the QR ticket goes out.' },
   { icon: ICONS.qr, title: 'QR tickets and scanners', text: 'Attendees get a QR ticket by email (and can download it). Add phone scanners for the door and for freebies like water or snacks.' },
   { icon: ICONS.users, title: 'Live attendance', text: 'See who checked in as it happens, search registrations, and export everything to Excel, CSV or JSON.' },
 ];
@@ -111,7 +111,7 @@ const FAQ = [
   { q: 'What happens to old bookings on the Free plan?', a: 'They are deleted 60 days after the appointment date. You get an email a week before with a CSV download. On Bookings Pro, your history is kept.' },
   { q: 'Can I run events too?', a: 'Yes. Create seminars, webinars or classes on their own page, onsite or online, free or paid to attend. Every event includes up to 50 participants on every plan; bigger events are available per event (51–300 for $10, up to 500 for $20). The Free plan allows one event per day.' },
   { q: 'How does event check-in work?', a: 'Onsite attendees get a QR ticket by email and can download it as an image or PDF. Scan it at the door from the event’s check-in page, or add event scanners: people who sign in on their own phone to check attendees in and hand out claimables like water or snacks. Check-ins show up live.' },
-  { q: 'How do paid events work without online payment?', a: 'You collect the payment yourself, add the attendee and give them an 8-character code. They enter it on the event page to confirm their place and receive their QR ticket.' },
+  { q: 'How do paid events work without online payment?', a: 'Add up to 4 ways to pay (a QR code like GCash or Maya, or bank details) and they show on the registration form. Attendees pay, then register with a screenshot or PDF of their proof of payment. You check it and approve it (they get their QR ticket by email) or reject it (they have 10 hours to send a new one). You can also take the payment yourself and give them an 8-character code.' },
   { q: 'Are free events kept forever?', a: 'Events of up to 50 participants are deleted automatically 3 months after they end. You agree to this when creating the event, get reminders 7, 3 and 1 days before, and receive the complete event as CSV and JSON by email.' },
   { q: 'Can I upgrade later?', a: 'Yes, anytime, and you keep everything you’ve set up.' },
 ];

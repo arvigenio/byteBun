@@ -34,29 +34,47 @@ export class AdminRealtimeGateway implements OnGatewayConnection, OnModuleDestro
 
   constructor(@Inject(AUTH) private readonly auth: Auth) {}
 
+  // "unauthorized" makes the page leave the admin area, so it's only sent when the session is
+  // really gone. Anything else (another origin, a database hiccup, a restart) just drops the
+  // live connection: the page stays signed in and its normal API calls decide.
   async handleConnection(client: Socket) {
+    const origin = client.handshake.headers.origin;
+    if (origin && origin !== config.auth.url) {
+      logger.warn({ origin, expected: config.auth.url }, 'Realtime connection from another origin refused (check BETTER_AUTH_URL)');
+      client.disconnect(true);
+      return;
+    }
+    let admin: Awaited<ReturnType<typeof getAdminSession>>;
     try {
-      const origin = client.handshake.headers.origin;
-      if (origin && origin !== config.auth.url) throw new Error('origin not allowed');
-      const admin = await getAdminSession(this.auth, client.handshake.headers);
-      if (!admin) throw new Error('not signed in');
-      client.data.sessionToken = admin.session.token;
-      client.data.userId = admin.user.id;
-      await client.join(ADMINS_ROOM);
-      this.startRecheck();
-    } catch {
+      admin = await getAdminSession(this.auth, client.handshake.headers);
+    } catch (err) {
+      logger.warn({ reason: err instanceof Error ? err.message : String(err) }, 'Realtime session check failed; connection dropped (not signed out)');
+      client.disconnect(true);
+      return;
+    }
+    if (!admin) {
       client.emit('unauthorized');
       client.disconnect(true);
+      return;
     }
+    client.data.sessionToken = admin.session.token;
+    client.data.userId = admin.user.id;
+    await client.join(ADMINS_ROOM);
+    this.startRecheck();
   }
 
-  /** Drops connections whose session is no longer valid. */
+  /** Drops connections whose session is no longer valid (expired, or signed out elsewhere). */
   private startRecheck() {
     if (this.recheck) return;
     this.recheck = setInterval(async () => {
       const sockets = await this.server.in(ADMINS_ROOM).fetchSockets();
       for (const s of sockets) {
-        const admin = await getAdminSession(this.auth, s.handshake.headers).catch(() => null);
+        let admin: Awaited<ReturnType<typeof getAdminSession>>;
+        try {
+          admin = await getAdminSession(this.auth, s.handshake.headers);
+        } catch {
+          continue; // can't tell right now: check again next time
+        }
         if (!admin || admin.session.token !== s.data.sessionToken) {
           s.emit('unauthorized');
           s.disconnect(true);

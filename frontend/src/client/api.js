@@ -19,19 +19,23 @@ export const toError = (err) => {
   return { status: err?.status ?? 0, error: body.error ?? err?.code ?? 'error', message: err?.message ?? 'Something went wrong.', fields: err?.fields ?? {}, conflicts: body.conflicts };
 };
 
-const baseQuery = async ({ url, method = 'get', body, params, headers }) => {
+const baseQuery = async ({ url, method = 'get', body, params, headers, timeout }) => {
   try {
-    const data = await (method === 'get' || method === 'delete' ? http[method](url, { params, headers }) : http[method](url, body ?? {}, { params, headers }));
+    const cfg = { params, headers, ...(timeout ? { timeout } : {}) };
+    const data = await (method === 'get' || method === 'delete' ? http[method](url, cfg) : http[method](url, body ?? {}, cfg));
     return { data };
   } catch (err) {
     return { error: toError(err) };
   }
 };
 
+/** Uploads (proofs of payment, QR codes) on slow mobile connections. */
+const UPLOAD_TIMEOUT = 120_000;
+
 export const api = createApi({
   reducerPath: 'api',
   baseQuery,
-  tagTypes: ['Profile', 'Me', 'Overview', 'Settings', 'Blocked', 'Services', 'Bookings', 'Team', 'Events'],
+  tagTypes: ['Profile', 'Me', 'Overview', 'Settings', 'Blocked', 'Services', 'Bookings', 'Team', 'Events', 'Checkout', 'Affiliate', 'Chat', 'ChatRoom'],
   endpoints: (b) => ({
     config: b.query({ query: () => ({ url: '/client/config' }) }),
     me: b.query({ query: () => ({ url: '/client/me' }), providesTags: ['Me'] }),
@@ -84,9 +88,27 @@ export const api = createApi({
     requestEventDelete: b.mutation({ query: (id) => ({ url: `/client/bookings/events/${id}/delete-code`, method: 'post', body: {} }) }),
     deleteEvent: b.mutation({ query: ({ id, code, notifyAttendees }) => ({ url: `/client/bookings/events/${id}/delete`, method: 'post', body: { code, notifyAttendees } }), invalidatesTags: ['Events'] }),
     checkVoucher: b.mutation({ query: (code) => ({ url: '/client/bookings/events/vouchers/check', method: 'post', body: { code } }) }),
+    // Promo codes (event-promos.ts)
+    promoCodes: b.query({ query: (id) => ({ url: `/client/bookings/events/${id}/promo-codes` }), providesTags: ['Events'] }),
+    adminPromoQuote: b.query({ query: ({ id, code, quantity, amount }) => ({ url: `/client/bookings/events/${id}/promo-codes/quote`, params: { code, quantity, amount } }), keepUnusedDataFor: 0 }),
+    addPromoCode: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/events/${id}/promo-codes`, method: 'post', body }), invalidatesTags: ['Events'] }),
+    updatePromoCode: b.mutation({ query: ({ id, promoId, ...body }) => ({ url: `/client/bookings/events/${id}/promo-codes/${promoId}`, method: 'patch', body }), invalidatesTags: ['Events'] }),
+    deletePromoCode: b.mutation({ query: ({ id, promoId }) => ({ url: `/client/bookings/events/${id}/promo-codes/${promoId}`, method: 'delete' }), invalidatesTags: ['Events'] }),
+    // Refund requests (event-refund-requests.ts)
+    refundRequests: b.query({ query: (id) => ({ url: `/client/bookings/events/${id}/refund-requests` }), providesTags: ['Events'] }),
+    sendRefundRequest: b.mutation({ query: ({ id, ticketId, ...body }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/refund-request`, method: 'post', body }), invalidatesTags: ['Events'] }),
+    resendRefundRequest: b.mutation({ query: ({ id, requestId }) => ({ url: `/client/bookings/events/${id}/refund-requests/${requestId}/resend`, method: 'post', body: {} }), invalidatesTags: ['Events'] }),
+    cancelRefundRequest: b.mutation({ query: ({ id, requestId }) => ({ url: `/client/bookings/events/${id}/refund-requests/${requestId}/cancel`, method: 'post', body: {} }), invalidatesTags: ['Events'] }),
+    completeRefundRequest: b.mutation({ query: ({ id, requestId, form }) => ({ url: `/client/bookings/events/${id}/refund-requests/${requestId}/complete`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }), invalidatesTags: ['Events'] }),
+    // Cover photo and logo (event-payments.ts: EventMediaController)
+    uploadEventMedia: b.mutation({ query: ({ id, kind, form }) => ({ url: `/client/bookings/events/${id}/media/${kind}`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }), invalidatesTags: ['Events'] }),
+    deleteEventMedia: b.mutation({ query: ({ id, kind }) => ({ url: `/client/bookings/events/${id}/media/${kind}`, method: 'delete' }), invalidatesTags: ['Events'] }),
+    manualRegister: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/events/${id}/tickets/manual`, method: 'post', body }), invalidatesTags: ['Events'] }),
+    ticketLog: b.query({ query: ({ id, ticketId }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/log` }), providesTags: ['Events'] }),
+    eventCollections: b.query({ query: (id) => ({ url: `/client/bookings/events/${id}/collections` }), providesTags: ['Events'] }),
     issueEventCode: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/events/${id}/tickets`, method: 'post', body }), invalidatesTags: ['Events'] }),
     deleteEventCode: b.mutation({ query: ({ id, ticketId }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}`, method: 'delete' }), invalidatesTags: ['Events'] }),
-    revokeEventTicket: b.mutation({ query: ({ id, ticketId, reason }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/revoke`, method: 'post', body: { reason } }), invalidatesTags: ['Events'] }),
+    revokeEventTicket: b.mutation({ query: ({ id, ticketId, reason, scope = 'booking' }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/revoke`, method: 'post', body: { reason, scope } }), invalidatesTags: ['Events'] }),
     eventCheckIn: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/events/${id}/check-in`, method: 'post', body }), invalidatesTags: ['Events'] }),
     undoEventCheckIn: b.mutation({ query: ({ id, ticketId }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/check-in/undo`, method: 'post', body: {} }), invalidatesTags: ['Events'] }),
     eventScanners: b.query({ query: (id) => ({ url: `/client/bookings/events/${id}/scanners` }), providesTags: ['Events'] }),
@@ -99,6 +121,14 @@ export const api = createApi({
     unclaimHere: b.mutation({ query: ({ id, claimableId, ticketId }) => ({ url: `/client/bookings/events/${id}/claimables/${claimableId}/undo`, method: 'post', body: { ticketId } }), invalidatesTags: ['Events'] }),
     deleteClaimable: b.mutation({ query: ({ id, claimableId }) => ({ url: `/client/bookings/events/${id}/claimables/${claimableId}`, method: 'delete' }), invalidatesTags: ['Events'] }),
     deleteEventScanner: b.mutation({ query: ({ id, scannerId }) => ({ url: `/client/bookings/events/${id}/scanners/${scannerId}`, method: 'delete' }), invalidatesTags: ['Events'] }),
+    // Paid events: payment channels (FormData: type, label, bank fields, file) and proofs of payment (event-payments.ts)
+    addPaymentChannel: b.mutation({ query: ({ id, form }) => ({ url: `/client/bookings/events/${id}/payment-channels`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }), invalidatesTags: ['Events'] }),
+    updatePaymentChannel: b.mutation({ query: ({ id, channelId, form }) => ({ url: `/client/bookings/events/${id}/payment-channels/${channelId}`, method: 'patch', body: form, timeout: UPLOAD_TIMEOUT }), invalidatesTags: ['Events'] }),
+    deletePaymentChannel: b.mutation({ query: ({ id, channelId }) => ({ url: `/client/bookings/events/${id}/payment-channels/${channelId}`, method: 'delete' }), invalidatesTags: ['Events'] }),
+    approvePayment: b.mutation({ query: ({ id, ticketId }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/approve`, method: 'post', body: {} }), invalidatesTags: ['Events'] }),
+    rejectPayment: b.mutation({ query: ({ id, ticketId, reason }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/reject`, method: 'post', body: { reason } }), invalidatesTags: ['Events'] }),
+    requestProof: b.mutation({ query: ({ id, ticketId, ...body }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/request-proof`, method: 'post', body }), invalidatesTags: ['Events'] }),
+    refundPayment: b.mutation({ query: ({ id, ticketId, form }) => ({ url: `/client/bookings/events/${id}/tickets/${ticketId}/refund`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }), invalidatesTags: ['Events'] }),
     requestEventUpgrade: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/events/${id}/upgrade-request`, method: 'post', body }) }),
 
     // Public (no login)
@@ -114,6 +144,12 @@ export const api = createApi({
     scannerCheckIn: b.mutation({ query: ({ scannerCode, token, ...body }) => ({ url: `/scanner/${encodeURIComponent(scannerCode)}/check-in`, method: 'post', body, headers: { 'X-Scanner-Token': token } }) }),
     scannerSignOut: b.mutation({ query: ({ scannerCode, token }) => ({ url: `/scanner/${encodeURIComponent(scannerCode)}/sign-out`, method: 'post', body: {}, headers: { 'X-Scanner-Token': token } }) }),
     scannerUndo: b.mutation({ query: ({ scannerCode, token, ticketId }) => ({ url: `/scanner/${encodeURIComponent(scannerCode)}/undo`, method: 'post', body: { ticketId }, headers: { 'X-Scanner-Token': token } }) }),
+    promoQuote: b.query({ query: ({ slug, event, code, quantity = 1 }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/events/${encodeURIComponent(event)}/promo`, params: { code, quantity } }), keepUnusedDataFor: 0 }),
+    publicRefundRequest: b.query({ query: ({ slug, event, token }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/events/${encodeURIComponent(event)}/refund-request`, headers: { 'X-Refund-Token': token } }), keepUnusedDataFor: 0 }),
+    submitRefundDetails: b.mutation({ query: ({ slug, event, form }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/events/${encodeURIComponent(event)}/refund-request`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }) }),
+    registerPaidEvent: b.mutation({ query: ({ slug, event, form }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/events/${encodeURIComponent(event)}/register-paid`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }) }),
+    uploadRequest: b.query({ query: ({ slug, event, token }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/events/${encodeURIComponent(event)}/upload-request`, headers: { 'X-Upload-Token': token } }), keepUnusedDataFor: 0 }),
+    reuploadPayment: b.mutation({ query: ({ slug, event, form }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/events/${encodeURIComponent(event)}/payment`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }) }),
     claimEvent: b.mutation({ query: ({ slug, event, code }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/events/${encodeURIComponent(event)}/claim`, method: 'post', body: { code } }) }),
     publicPage: b.query({ query: (slug) => ({ url: `/public/bookings/${encodeURIComponent(slug)}` }) }),
     publicAvailability: b.query({ query: ({ slug, ...params }) => ({ url: `/public/bookings/${encodeURIComponent(slug)}/availability`, params }), keepUnusedDataFor: 0 }),
@@ -122,6 +158,46 @@ export const api = createApi({
     manageAvailability: b.query({ query: ({ token, ...params }) => ({ url: '/public/manage-booking/availability', params, headers: { 'X-Booking-Token': token } }), keepUnusedDataFor: 0 }),
     manageReschedule: b.mutation({ query: ({ token, ...body }) => ({ url: '/public/manage-booking/reschedule', method: 'post', body, headers: { 'X-Booking-Token': token } }) }),
     manageCancel: b.mutation({ query: (token) => ({ url: '/public/manage-booking/cancel', method: 'post', headers: { 'X-Booking-Token': token } }) }),
+
+    // Paid events' affiliates (backend booking/event-affiliates.ts): up to 5, ranked by verified referrals.
+    eventAffiliates: b.query({ query: (id) => ({ url: `/client/bookings/events/${id}/affiliates` }), providesTags: ['Events'] }),
+    addEventAffiliate: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/bookings/events/${id}/affiliates`, method: 'post', body }), invalidatesTags: ['Events'] }),
+    updateEventAffiliate: b.mutation({ query: ({ id, aid, ...body }) => ({ url: `/client/bookings/events/${id}/affiliates/${aid}`, method: 'patch', body }), invalidatesTags: ['Events'] }),
+    resendEventAffiliate: b.mutation({ query: ({ id, aid }) => ({ url: `/client/bookings/events/${id}/affiliates/${aid}/resend`, method: 'post' }) }),
+    deleteEventAffiliate: b.mutation({ query: ({ id, aid }) => ({ url: `/client/bookings/events/${id}/affiliates/${aid}`, method: 'delete' }), invalidatesTags: ['Events'] }),
+    payEventAffiliate: b.mutation({ query: ({ id, aid, ...body }) => ({ url: `/client/bookings/events/${id}/affiliates/${aid}/payouts`, method: 'post', body }), invalidatesTags: ['Events'] }),
+
+    // Buying a plan (backend affiliates/affiliates.controller.ts): choose, pay Byte Bun, upload a proof.
+    checkout: b.query({ query: () => ({ url: '/client/billing/checkout' }), providesTags: ['Checkout'] }),
+    planPromo: b.mutation({ query: (body) => ({ url: '/client/billing/promo', method: 'post', body }) }),
+    payPlan: b.mutation({ query: (form) => ({ url: '/client/billing/payments', method: 'post', body: form, timeout: UPLOAD_TIMEOUT }), invalidatesTags: ['Checkout'] }),
+    cancelPlanPayment: b.mutation({ query: (id) => ({ url: `/client/billing/payments/${id}/cancel`, method: 'post' }), invalidatesTags: ['Checkout'] }),
+
+    // The affiliate portal (backend affiliates/affiliate-portal.ts): its own sign-in.
+    affiliateInvite: b.query({ query: (token) => ({ url: '/affiliate/invite', params: { t: token } }), keepUnusedDataFor: 0 }),
+    affiliateJoin: b.mutation({ query: (body) => ({ url: '/affiliate/join', method: 'post', body }), invalidatesTags: ['Affiliate'] }),
+    affiliateCode: b.mutation({ query: (email) => ({ url: '/affiliate/auth/code', method: 'post', body: { email } }) }),
+    affiliateVerify: b.mutation({ query: (body) => ({ url: '/affiliate/auth/verify', method: 'post', body }), invalidatesTags: ['Affiliate'] }),
+    affiliateSignOut: b.mutation({ query: () => ({ url: '/affiliate/auth/sign-out', method: 'post' }), invalidatesTags: ['Affiliate'] }),
+    affiliateMe: b.query({ query: () => ({ url: '/affiliate/me' }), providesTags: ['Affiliate'] }),
+    affiliateUpdate: b.mutation({ query: (body) => ({ url: '/affiliate/me', method: 'patch', body }), invalidatesTags: ['Affiliate'] }),
+
+    // Team (backend team/): custom roles and who works on which event.
+    teamRoles: b.query({ query: () => ({ url: '/client/team/roles' }), providesTags: ['Team'] }),
+    addTeamRole: b.mutation({ query: (body) => ({ url: '/client/team/roles', method: 'post', body }), invalidatesTags: ['Team', 'Me'] }),
+    updateTeamRole: b.mutation({ query: ({ id, ...body }) => ({ url: `/client/team/roles/${id}`, method: 'patch', body }), invalidatesTags: ['Team', 'Me'] }),
+    deleteTeamRole: b.mutation({ query: (id) => ({ url: `/client/team/roles/${id}`, method: 'delete' }), invalidatesTags: ['Team'] }),
+    eventTeam: b.query({ query: (id) => ({ url: `/client/bookings/events/${id}/team` }), providesTags: ['Events', 'Team'] }),
+    assignEvent: b.mutation({ query: ({ id, userId }) => ({ url: `/client/bookings/events/${id}/team`, method: 'post', body: { userId } }), invalidatesTags: ['Events', 'Team', 'Chat'] }),
+    unassignEvent: b.mutation({ query: ({ id, userId }) => ({ url: `/client/bookings/events/${id}/team/${encodeURIComponent(userId)}`, method: 'delete' }), invalidatesTags: ['Events', 'Team', 'Chat'] }),
+
+    // Team chat (backend team/chat.service.ts); live updates come from /client/chat/stream.
+    chatRooms: b.query({ query: () => ({ url: '/client/chat/rooms' }), providesTags: ['Chat'] }),
+    chatMessages: b.query({ query: (key) => ({ url: `/client/chat/rooms/${encodeURIComponent(key)}/messages` }), providesTags: (_r, _e, key) => [{ type: 'ChatRoom', id: key }] }),
+    olderChatMessages: b.mutation({ query: ({ key, before }) => ({ url: `/client/chat/rooms/${encodeURIComponent(key)}/messages`, method: 'get', params: { before } }) }),
+    sendChat: b.mutation({ query: ({ key, form }) => ({ url: `/client/chat/rooms/${encodeURIComponent(key)}/messages`, method: 'post', body: form, timeout: UPLOAD_TIMEOUT }) }),
+    deleteChat: b.mutation({ query: ({ key, id }) => ({ url: `/client/chat/rooms/${encodeURIComponent(key)}/messages/${id}`, method: 'delete' }) }),
+    readChat: b.mutation({ query: ({ key, lastId }) => ({ url: `/client/chat/rooms/${encodeURIComponent(key)}/read`, method: 'post', body: { lastId } }), invalidatesTags: ['Chat'] }),
   }),
 });
 
@@ -170,11 +246,39 @@ export const {
   useRequestEventDeleteMutation,
   useCheckVoucherMutation,
   useIssueEventCodeMutation,
+  useManualRegisterMutation,
+  useRefundRequestsQuery,
+  useSendRefundRequestMutation,
+  useResendRefundRequestMutation,
+  useCancelRefundRequestMutation,
+  useCompleteRefundRequestMutation,
+  useUploadEventMediaMutation,
+  useDeleteEventMediaMutation,
+  usePublicRefundRequestQuery,
+  useSubmitRefundDetailsMutation,
+  usePromoCodesQuery,
+  useAddPromoCodeMutation,
+  useUpdatePromoCodeMutation,
+  useDeletePromoCodeMutation,
+  useLazyPromoQuoteQuery,
+  useLazyAdminPromoQuoteQuery,
+  useEventCollectionsQuery,
+  useTicketLogQuery,
   useDeleteEventCodeMutation,
   useRevokeEventTicketMutation,
   useEventCheckInMutation,
   useUndoEventCheckInMutation,
   useRequestEventUpgradeMutation,
+  useAddPaymentChannelMutation,
+  useUpdatePaymentChannelMutation,
+  useDeletePaymentChannelMutation,
+  useApprovePaymentMutation,
+  useRejectPaymentMutation,
+  useRequestProofMutation,
+  useRefundPaymentMutation,
+  useUploadRequestQuery,
+  useRegisterPaidEventMutation,
+  useReuploadPaymentMutation,
   useEventScannersQuery,
   useCreateEventScannerMutation,
   useNewScannerCodeMutation,
@@ -204,4 +308,34 @@ export const {
   useManageAvailabilityQuery,
   useManageRescheduleMutation,
   useManageCancelMutation,
+  useEventAffiliatesQuery,
+  useAddEventAffiliateMutation,
+  useUpdateEventAffiliateMutation,
+  useResendEventAffiliateMutation,
+  useDeleteEventAffiliateMutation,
+  usePayEventAffiliateMutation,
+  useCheckoutQuery,
+  usePlanPromoMutation,
+  usePayPlanMutation,
+  useCancelPlanPaymentMutation,
+  useAffiliateInviteQuery,
+  useAffiliateJoinMutation,
+  useAffiliateCodeMutation,
+  useAffiliateVerifyMutation,
+  useAffiliateSignOutMutation,
+  useAffiliateMeQuery,
+  useAffiliateUpdateMutation,
+  useTeamRolesQuery,
+  useAddTeamRoleMutation,
+  useUpdateTeamRoleMutation,
+  useDeleteTeamRoleMutation,
+  useEventTeamQuery,
+  useAssignEventMutation,
+  useUnassignEventMutation,
+  useChatRoomsQuery,
+  useChatMessagesQuery,
+  useOlderChatMessagesMutation,
+  useSendChatMutation,
+  useDeleteChatMutation,
+  useReadChatMutation,
 } = api;

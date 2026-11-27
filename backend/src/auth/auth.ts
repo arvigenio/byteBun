@@ -156,7 +156,10 @@ export function createAuth({ cfg, prisma, mailer, alerts }: AuthDeps) {
     advanced: {
       cookiePrefix: 'bb-admin',
       useSecureCookies: cfg.isProd,
-      defaultCookieAttributes: { httpOnly: true, sameSite: 'strict', secure: cfg.isProd },
+      // Lax, not Strict: with Strict, opening the admin site from a link (an email, a chat app,
+      // another site) arrives without the session and looks signed out. Changes stay protected:
+      // Lax cookies aren't sent on cross-site POSTs, and Better Auth checks the Origin.
+      defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', secure: cfg.isProd },
       // Set by request-meta.ts from the verified client IP (never from a raw client header).
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     },

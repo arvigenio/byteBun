@@ -356,6 +356,92 @@ export function accountNoticeMail(cfg: AppConfig, to: string, d: { businessName:
   return { to, subject: title, text, html, from: cfg.clients.mailFrom };
 }
 
+// ---- Plan payments (src/clients/affiliates/): the business paying Byte Bun for a plan ----
+
+export interface PlanPaymentView {
+  businessName: string;
+  planName: string;
+  /** "Monthly" | "Yearly" */
+  cycle: string;
+  /** "$10", "$9" ... */
+  amount: string;
+  list: string;
+  discount: string | null;
+  promoCode: string | null;
+  planUrl: string;
+}
+
+const paymentDetails = (v: PlanPaymentView): [string, string][] => [
+  ['Business', v.businessName],
+  ['Plan', `${v.planName} (${v.cycle.toLowerCase()})`],
+  ...(v.discount ? ([['Price', v.list], [`Promo ${v.promoCode}`, `−${v.discount}`]] as [string, string][]) : []),
+  ['Amount paid', v.amount],
+];
+
+export function planPaymentReceivedMail(cfg: AppConfig, to: string, v: PlanPaymentView): Mail {
+  const title = 'We received your payment';
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `Byte Bun is verifying your payment for ${v.planName}.`,
+    title,
+    intro: [`Thanks! Byte Bun is verifying your proof of payment for ${v.planName}. You'll get an email as soon as it's verified, usually within one business day. Your plan changes right after.`],
+    details: paymentDetails(v),
+    buttons: [{ label: 'View your plan', href: v.planUrl, primary: true }],
+    note: 'Questions? Reply to this email.',
+    footer: productFooter,
+  });
+  return { to, subject: `Payment received: ${v.planName} for ${v.businessName}`, text, html, from: cfg.clients.mailFrom };
+}
+
+export function planPaymentApprovedMail(cfg: AppConfig, to: string, v: PlanPaymentView, note: string | null): Mail {
+  const title = `You're on ${v.planName}`;
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `Payment verified. ${v.businessName} is now on ${v.planName}.`,
+    title,
+    intro: [`Your payment is verified and ${v.businessName} is now on ${v.planName}. Everything you had is kept, and the new features work right away.`, ...(note ? [`A note from Byte Bun: ${note}`] : [])],
+    details: paymentDetails(v),
+    buttons: [{ label: 'Open Byte Bun Bookings', href: v.planUrl, primary: true }],
+    footer: productFooter,
+  });
+  return { to, subject: `Payment verified: ${v.businessName} is on ${v.planName}`, text, html, from: cfg.clients.mailFrom };
+}
+
+export function planPaymentRejectedMail(cfg: AppConfig, to: string, v: PlanPaymentView, reason: string): Mail {
+  const title = 'We couldn’t verify your payment';
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `Your payment for ${v.planName} wasn't verified.`,
+    title,
+    intro: [`We couldn't verify your payment for ${v.planName}, so your plan hasn't changed.`, `Reason: ${reason}`, 'You can upload a new proof from your Plan page, or reply to this email if you think this is a mistake.'],
+    details: paymentDetails(v),
+    buttons: [{ label: 'Go to your Plan page', href: v.planUrl, primary: true }],
+    footer: productFooter,
+  });
+  return { to, subject: `Payment not verified: ${v.planName} for ${v.businessName}`, text, html, from: cfg.clients.mailFrom };
+}
+
+/** Team chat: unread messages while the person wasn't in the app (team/chat.service.ts). */
+export function chatDigestMail(cfg: AppConfig, to: string, d: { businessName: string; rooms: { name: string; count: number; last: string }[]; url: string }): Mail {
+  const total = d.rooms.reduce((n, r) => n + r.count, 0);
+  const title = `${total} unread ${total === 1 ? 'message' : 'messages'} in ${d.businessName}`;
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: d.rooms.map((r) => r.last).join(' · ').slice(0, 140),
+    title,
+    intro: ['Your team wrote while you were away.'],
+    details: d.rooms.map((r) => [`${r.name} (${r.count})`, r.last] as [string, string]),
+    buttons: [{ label: 'Open the team chat', href: d.url, primary: true }],
+    note: 'We email you about unread messages at most once per message, only while you’re not in the app.',
+    footer: productFooter,
+  });
+  return { to, subject: title, text, html, from: cfg.clients.mailFrom };
+}
+
 /** Plain-text WhatsApp message for n8n (it adds the template / buttons it needs). */
 export function whatsappText(kind: string, v: BookingView): string {
   const when = whenOf(v);
@@ -492,6 +578,8 @@ export interface EventView {
   checkIn: { code: string; qrPng: Buffer } | null;
   /** Free events: the attendee's private link to cancel (paid events can't be cancelled). */
   cancelUrl: string | null;
+  /** Onsite: the attendee's private ticket page (QR code), and links that download it as an image or PDF. */
+  ticketUrl: string | null;
 }
 
 function eventDetails(v: EventView): [string, string][] {
@@ -511,12 +599,13 @@ function eventButtons(v: EventView, calendar: boolean): Button[] {
   ];
 }
 
-function eventMail(cfg: AppConfig, v: EventView, subject: string, c: Omit<Content, 'brandName' | 'color' | 'footer'>, extras: { qr: boolean; ics: boolean }): Mail {
+function eventMail(cfg: AppConfig, v: EventView, subject: string, c: Omit<Content, 'brandName' | 'color' | 'footer'>, extras: { qr: boolean; ics: boolean; attach?: MailAttachment[] }): Mail {
   const qr = extras.qr && v.checkIn ? v.checkIn : null;
   const { html, text } = render({ ...c, ...(qr ? { checkIn: { code: qr.code } } : {}), brandName: v.brand.businessName, color: v.brand.primaryColor, footer: brandFooter(v.brand) });
   const attachments: MailAttachment[] = [
     ...(extras.ics ? [{ filename: 'event.ics', content: v.calendar.ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }] : []),
     ...(qr ? [{ filename: 'check-in.png', content: qr.qrPng, contentType: 'image/png', cid: 'checkin-qr' }] : []),
+    ...(extras.attach ?? []),
   ];
   return { to: v.attendeeEmail, names: { [v.attendeeEmail]: v.attendeeName }, subject, text, html, from: fromFor(cfg, v.brand.businessName), replyTo: v.brand.replyTo ?? undefined, attachments: attachments.length ? attachments : undefined };
 }
@@ -529,12 +618,22 @@ export function eventConfirmationMail(cfg: AppConfig, v: EventView): Mail {
     {
       preheader: `${v.title} · ${v.when}`,
       title: "You're registered!",
-      intro: [`Hi ${v.attendeeName}, your place at ${v.title} with ${v.brand.businessName} is confirmed.`],
+      intro: [`Hi ${v.attendeeName}, your spot at ${v.title} with ${v.brand.businessName} is confirmed.`],
       details: eventDetails(v),
-      buttons: [...eventButtons(v, true), ...(v.cancelUrl ? [{ label: 'Cancel my registration', href: v.cancelUrl }] : [])],
+      buttons: [
+        ...(v.ticketUrl
+          ? [
+              { label: 'View ticket in browser', href: v.ticketUrl, primary: true },
+              { label: 'Download image', href: `${v.ticketUrl}&download=png` },
+              { label: 'Download PDF', href: `${v.ticketUrl}&download=pdf` },
+            ]
+          : []),
+        ...eventButtons(v, true),
+        ...(v.cancelUrl ? [{ label: 'Cancel my registration', href: v.cancelUrl }] : []),
+      ],
       note: [
         v.format === 'online' && !v.meetingUrl ? 'We’ll email you the link to join before the event.' : null,
-        v.cancelUrl ? 'Can’t come? Please cancel, so someone else can have your place.' : null,
+        v.cancelUrl ? 'Can’t come? Please cancel, so someone else can have your spot.' : null,
         v.brand.phone ? `Questions? Call ${v.brand.phone}.` : null,
       ]
         .filter(Boolean)
@@ -579,7 +678,7 @@ export function eventCheckedInMail(cfg: AppConfig, v: EventView, checkedInAt: st
 }
 
 /** The attendee cancelled their own registration (free events). */
-export function eventCancelledMail(cfg: AppConfig, v: EventView): Mail {
+export function eventCancelledMail(cfg: AppConfig, v: EventView, spots = 1): Mail {
   return eventMail(
     cfg,
     v,
@@ -587,7 +686,12 @@ export function eventCancelledMail(cfg: AppConfig, v: EventView): Mail {
     {
       preheader: `You cancelled your registration for ${v.title}`,
       title: 'Your registration is cancelled',
-      intro: [`Hi ${v.attendeeName}, you cancelled your registration for ${v.title} with ${v.brand.businessName}. Your QR code no longer works.`, 'Changed your mind? You can register again on the event page while places are left.'],
+      intro: [
+        spots > 1
+          ? `Hi ${v.attendeeName}, you cancelled your booking of ${spots} spots for ${v.title} with ${v.brand.businessName}. Their QR codes no longer work.`
+          : `Hi ${v.attendeeName}, you cancelled your registration for ${v.title} with ${v.brand.businessName}. Your QR code no longer works.`,
+        'Changed your mind? You can register again on the event page while spots are left.',
+      ],
       details: [['Event', v.title], ['When', v.when]],
       buttons: [{ label: 'Event page', href: v.pageUrl }],
     },
@@ -595,7 +699,7 @@ export function eventCancelledMail(cfg: AppConfig, v: EventView): Mail {
   );
 }
 
-export function eventRevokedMail(cfg: AppConfig, v: EventView, reason: string | null): Mail {
+export function eventRevokedMail(cfg: AppConfig, v: EventView, reason: string | null, spots = 1): Mail {
   return eventMail(
     cfg,
     v,
@@ -603,12 +707,272 @@ export function eventRevokedMail(cfg: AppConfig, v: EventView, reason: string | 
     {
       preheader: `Your registration for ${v.title} was cancelled`,
       title: 'Your registration was cancelled',
-      intro: [`Hi ${v.attendeeName}, ${v.brand.businessName} cancelled your registration for ${v.title}.`, ...(reason ? [`Reason: ${reason}`] : [])],
+      intro: [spots > 1 ? `Hi ${v.attendeeName}, ${v.brand.businessName} cancelled ${spots} spots of your booking for ${v.title}. Their QR codes no longer work.` : `Hi ${v.attendeeName}, ${v.brand.businessName} cancelled your registration for ${v.title}.`, ...(reason ? [`Reason: ${reason}`] : [])],
       details: [['Event', v.title], ['When', v.when]],
       note: v.brand.phone ? `Questions? Call ${v.brand.phone}.` : 'If you have questions, reply to this email.',
     },
     { qr: false, ics: false },
   );
+}
+
+/** Several places for one person (Manual Register in bulk): every code listed, each QR code attached. */
+export function eventBulkConfirmationMail(cfg: AppConfig, v: EventView, tickets: { code: string; qrPng: Buffer | null; ticketUrl: string | null }[], pdf: Buffer | null = null): Mail {
+  const n = tickets.length;
+  return eventMail(
+    cfg,
+    v,
+    `You're registered: ${v.title}, ${n} spots`,
+    {
+      preheader: `${n} spots at ${v.title} · ${v.when}`,
+      title: `You have ${n} spots!`,
+      intro: [
+        `Hi ${v.attendeeName}, ${v.brand.businessName} registered ${n} spots for you at ${v.title}.`,
+        v.format === 'online' ? 'It’s online: join with the link.' : 'Each spot has its own check-in code and QR code. They’re all attached, and together in one PDF (qr-codes.pdf) to print or keep. Show one per person at the entrance.',
+      ],
+      details: [...eventDetails(v), ...tickets.map((t, i) => [`Spot ${i + 1}`, t.code] as [string, string])],
+      buttons: [...tickets.filter((t) => t.ticketUrl).slice(0, 10).map((t, i) => ({ label: `Ticket ${i + 1}`, href: t.ticketUrl!, primary: i === 0 })), ...eventButtons(v, true)],
+      note: [n > 10 ? 'Every QR code is attached to this email.' : null, v.brand.phone ? `Questions? Call ${v.brand.phone}.` : null].filter(Boolean).join(' ') || undefined,
+    },
+    {
+      qr: false,
+      ics: true,
+      attach: [
+        ...(pdf ? [{ filename: 'qr-codes.pdf', content: pdf, contentType: 'application/pdf' }] : []),
+        ...tickets.filter((t) => t.qrPng).map((t, i) => ({ filename: `place-${i + 1}-${t.code}.png`, content: t.qrPng!, contentType: 'image/png' })),
+      ],
+    },
+  );
+}
+
+/** Paid events: the attendee uploaded a proof of payment; the business verifies it. */
+export function eventPaymentReceivedMail(cfg: AppConfig, v: EventView): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `Payment received, being verified: ${v.title}`,
+    {
+      preheader: `We got your proof of payment for ${v.title}`,
+      title: 'We got your proof of payment',
+      intro: [`Hi ${v.attendeeName}, thanks for registering for ${v.title}. ${v.brand.businessName} is checking your payment now.`, 'Once it’s confirmed, we’ll email you your confirmation and QR code.'],
+      details: eventDetails(v),
+      buttons: [{ label: 'Event page', href: v.pageUrl }],
+      note: v.brand.phone ? `Questions? Call ${v.brand.phone}.` : 'If you have questions, reply to this email.',
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/**
+ * Paid events: the business asks for a proof. replace: another one instead of the last (unclear,
+ * wrong file, payment not found). additional: one more, e.g. the rest of an insufficient amount.
+ * Each email has its own upload link (the previous one stops working); 10 hours, then the place
+ * is released.
+ */
+export function eventProofRequestMail(cfg: AppConfig, v: EventView, d: { kind: 'replace' | 'additional'; note: string | null; amountDue: string | null; deadline: string; uploadUrl: string }): Mail {
+  const additional = d.kind === 'additional';
+  return eventMail(
+    cfg,
+    v,
+    additional ? `Payment incomplete: ${v.title}` : `Please send another proof of payment: ${v.title}`,
+    {
+      preheader: additional ? `Please pay the rest${d.amountDue ? ` (${d.amountDue})` : ''} and upload the proof by ${d.deadline}` : `Please upload a new proof of payment by ${d.deadline}`,
+      title: additional ? 'Your payment is not complete yet' : 'Please send another proof of payment',
+      intro: [
+        additional
+          ? `Hi ${v.attendeeName}, ${v.brand.businessName} received less than the full amount for ${v.title}.${d.amountDue ? ` Still to pay: ${d.amountDue}.` : ''} Please pay the rest, then upload the proof of that payment.`
+          : `Hi ${v.attendeeName}, ${v.brand.businessName} couldn’t confirm your payment for ${v.title} with the proof you sent. Please upload another one.`,
+        ...(d.note ? [`Note from ${v.brand.businessName}: ${d.note}`] : []),
+        `Please upload it by ${d.deadline} (10 hours), or your spot is released.${additional ? ' Your first proof is kept: just add the new one.' : ''}`,
+      ],
+      details: [['Event', v.title], ...(additional && d.amountDue ? ([['Still to pay', d.amountDue]] as [string, string][]) : []), ['Upload by', d.deadline]],
+      buttons: [{ label: additional ? 'Upload the additional proof' : 'Upload a new proof', href: d.uploadUrl, primary: true }],
+      note: `This link is only for you and works for this request only.${v.brand.phone ? ` Questions? Call ${v.brand.phone}.` : ' If you have questions, reply to this email.'}`,
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** Paid events: the business didn't approve the payment; the registration is cancelled. */
+export function eventPaymentNotApprovedMail(cfg: AppConfig, v: EventView, reason: string | null): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `Payment not approved: ${v.title}`,
+    {
+      preheader: `Your payment for ${v.title} was not approved`,
+      title: 'Your payment was not approved',
+      intro: [
+        `Hi ${v.attendeeName}, ${v.brand.businessName} reviewed your proof of payment for ${v.title} and did not approve it, so your registration was not confirmed.`,
+        ...(reason ? [`Reason: ${reason}`] : []),
+        `If you think this is a mistake, please contact ${v.brand.businessName}.`,
+      ],
+      details: [['Event', v.title], ['When', v.when]],
+      note: v.brand.phone ? `Questions? Call ${v.brand.phone}.` : 'If you have questions, reply to this email.',
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** A refund request: where should the business send the attendee's money? (a unique link) */
+export function eventRefundRequestMail(cfg: AppConfig, v: EventView, d: { amount: string | null; full: boolean; note: string | null; url: string; spots?: number }): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `Your refund for ${v.title}: where should we send it?`,
+    {
+      preheader: `${v.brand.businessName} will refund you${d.amount ? ` ${d.amount}` : ''}: tell them where to send it`,
+      title: 'Where should we send your refund?',
+      intro: [
+        `Hi ${v.attendeeName}, ${v.brand.businessName} will refund ${d.full ? 'your payment' : 'part of your payment'}${(d.spots ?? 1) > 1 ? ` (booking of ${d.spots} spots)` : ''} for ${v.title}${d.amount ? ` (${d.amount})` : ''}.`,
+        ...(d.note ? [`Note from ${v.brand.businessName}: ${d.note}`] : []),
+        'Please open the link and upload your e-wallet or bank QR code, or enter your bank details (bank name, account name and account number).',
+      ],
+      details: [['Event', v.title], ...(d.amount ? ([['Refund', d.amount]] as [string, string][]) : [])],
+      buttons: [{ label: 'Give my refund details', href: d.url, primary: true }],
+      note: `This link is only for you. You’ll get an email with the proof once the refund is sent.${v.brand.phone ? ` Questions? Call ${v.brand.phone}.` : ''}`,
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** To the owners and admins: an attendee sent where to send their refund. */
+export function refundDetailsReceivedMail(cfg: AppConfig, d: { to: string; businessName: string; eventTitle: string; attendeeName: string; amount: string | null; method: string; eventUrl: string }): Mail {
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `${d.attendeeName} sent their refund details for ${d.eventTitle}`,
+    title: 'Refund details received',
+    intro: [`${d.attendeeName} sent where to send their refund for “${d.eventTitle}” (${d.businessName}): ${d.method === 'qr' ? 'a QR code' : 'bank details'}.`, 'Send the refund, then mark the request completed with the proof of refund: it’s emailed to them.'],
+    details: [['Attendee', d.attendeeName], ['Event', d.eventTitle], ...(d.amount ? ([['Refund', d.amount]] as [string, string][]) : [])],
+    buttons: [{ label: 'Open the refund requests', href: d.eventUrl, primary: true }],
+    footer: productFooter,
+  });
+  return { to: d.to, subject: `Refund details received: ${d.attendeeName}, ${d.eventTitle}`, text, html, from: cfg.clients.mailFrom };
+}
+
+/** Paid events: a refund the business made (proof of refund attached when given). */
+export function eventRefundMail(cfg: AppConfig, v: EventView, d: { type: 'full' | 'partial'; amount: string | null; note: string | null; cancelled: boolean; attachment: MailAttachment | null; spots?: number }): Mail {
+  const full = d.type === 'full';
+  const n = d.spots ?? 1;
+  const yours = n > 1 ? `your booking of ${n} spots` : 'your payment';
+  return eventMail(
+    cfg,
+    v,
+    full ? `Refund for ${v.title}${d.cancelled ? ': registration cancelled' : ''}` : `Partial refund for ${v.title}`,
+    {
+      preheader: `${v.brand.businessName} sent you a ${full ? 'refund' : 'partial refund'}${d.amount ? ` of ${d.amount}` : ''}`,
+      title: full ? 'Your payment was refunded' : 'We refunded the extra amount',
+      intro: [
+        full
+          ? `Hi ${v.attendeeName}, ${v.brand.businessName} refunded ${yours} for ${v.title}${d.amount ? ` (${d.amount})` : ''}.`
+          : `Hi ${v.attendeeName}, you paid more than needed for ${v.title}, so ${v.brand.businessName} sent back the extra${d.amount ? `: ${d.amount}` : ''}.`,
+        n > 1
+          ? full
+            ? d.cancelled
+              ? `Those ${n} spots are cancelled and their QR codes no longer work.`
+              : `The ${n} spots stay active: their QR codes still work.`
+            : 'Your booking is confirmed: every QR code still works.'
+          : full
+            ? d.cancelled
+              ? 'Your registration is cancelled and your QR code no longer works.'
+              : 'Your registration stays active: your QR code still works.'
+            : 'Your registration is confirmed: your QR code still works.',
+        ...(d.note ? [`Note from ${v.brand.businessName}: ${d.note}`] : []),
+        ...(d.attachment ? ['The proof of refund is attached to this email.'] : []),
+      ],
+      details: [['Event', v.title], ['When', v.when], ...(n > 1 ? ([['Spots', String(n)]] as [string, string][]) : []), ['Refund', `${full ? 'Full' : 'Partial'}${d.amount ? `, ${d.amount}` : ''}`]],
+      note: 'Depending on your bank or e-wallet, it can take a few days to show. ' + (v.brand.phone ? `Questions? Call ${v.brand.phone}.` : 'If you have questions, reply to this email.'),
+    },
+    { qr: false, ics: false, attach: d.attachment ? [d.attachment] : [] },
+  );
+}
+
+/** Paid events: no new proof in time, so the place was released. */
+export function eventPaymentExpiredMail(cfg: AppConfig, v: EventView, reservation = false): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `${reservation ? 'Reservation expired' : 'Spot released'}: ${v.title}`,
+    {
+      preheader: reservation ? `Your reservation for ${v.title} expired` : `Your spot at ${v.title} was released`,
+      title: reservation ? 'Your reservation expired' : 'Your spot was released',
+      intro: [
+        reservation
+          ? `Hi ${v.attendeeName}, we didn’t receive your proof of payment within 2 hours, so your reservation for ${v.title} expired and the spot was released.`
+          : `Hi ${v.attendeeName}, we didn’t receive a new proof of payment in time, so your spot at ${v.title} was released.`,
+        'You can register again on the event page while spots are left.',
+      ],
+      details: [['Event', v.title], ['When', v.when]],
+      buttons: [{ label: 'Event page', href: v.pageUrl }],
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/**
+ * Paid events: the spots are reserved (or a waitlisted person got a freed one). Pay, then upload
+ * the proof with the link (also shown on the page right after reserving) within 2 hours, or the
+ * reservation expires. The link works once.
+ */
+export function eventReservedMail(cfg: AppConfig, v: EventView, d: { places: number; amountLabel: string | null; deadline: string; uploadUrl: string; fromWaitlist: boolean }): Mail {
+  const spots = d.places > 1 ? `${d.places} spots` : 'your spot';
+  return eventMail(
+    cfg,
+    v,
+    d.fromWaitlist ? `A spot opened up for you: ${v.title}` : `Reserved: ${v.title}, please pay by ${d.deadline}`,
+    {
+      preheader: `Pay${d.amountLabel ? ` ${d.amountLabel}` : ''} and upload the proof by ${d.deadline}`,
+      title: d.fromWaitlist ? 'A spot opened up for you!' : d.places > 1 ? `${d.places} spots reserved` : 'Your spot is reserved',
+      intro: [
+        d.fromWaitlist
+          ? `Hi ${v.attendeeName}, good news: a spot at ${v.title} was freed and it’s yours if you pay for it. It’s reserved for you for 2 hours.`
+          : `Hi ${v.attendeeName}, ${spots} at ${v.title} ${d.places > 1 ? 'are' : 'is'} reserved for you for 2 hours.`,
+        `To keep ${d.places > 1 ? 'them' : 'it'}, pay${d.amountLabel ? ` ${d.amountLabel}` : ''} and upload your proof of payment by ${d.deadline}. If you closed the page, use the button below.`,
+        'After that, the reservation expires and the spot goes to the next person.',
+      ],
+      details: [['Event', v.title], ['When', v.when], ...(d.places > 1 ? ([['Spots', String(d.places)]] as [string, string][]) : []), ...(d.amountLabel ? ([['To pay', d.amountLabel]] as [string, string][]) : []), ['Upload by', d.deadline]],
+      buttons: [{ label: 'Pay and upload the proof', href: d.uploadUrl, primary: true }],
+      note: `This link is only for you and works once: it stops working after you send your proof.${v.brand.phone ? ` Questions? Call ${v.brand.phone}.` : ' If you have questions, reply to this email.'}`,
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** Paid events, full: on the waitlist. No payment link yet: one follows if a reserved spot frees up. */
+export function eventWaitlistedMail(cfg: AppConfig, v: EventView): Mail {
+  return eventMail(
+    cfg,
+    v,
+    `You’re on the waitlist: ${v.title}`,
+    {
+      preheader: `We’ll email you a payment link if a spot opens up at ${v.title}`,
+      title: 'You’re on the waitlist',
+      intro: [
+        `Hi ${v.attendeeName}, all the spots at ${v.title} are reserved right now, so you’re on the waitlist.`,
+        'Some reservations aren’t paid yet. If one expires, the spot goes to the next person in line, and we’ll email you a link to pay and upload your proof of payment (you’ll then have 2 hours).',
+        'Please don’t pay anything until you get that email.',
+      ],
+      details: [['Event', v.title], ['When', v.when]],
+      buttons: [{ label: 'Event page', href: v.pageUrl }],
+      note: v.brand.phone ? `Questions? Call ${v.brand.phone}.` : 'If you have questions, reply to this email.',
+    },
+    { qr: false, ics: false },
+  );
+}
+
+/** To the business's owners and admins: a proof of payment to verify. */
+export function paymentToVerifyMail(cfg: AppConfig, d: { to: string; businessName: string; eventTitle: string; attendeeName: string; attendeeEmail: string; eventUrl: string; again: boolean }): Mail {
+  const { html, text } = render({
+    brandName: PRODUCT.name,
+    color: PRODUCT.color,
+    preheader: `${d.attendeeName} ${d.again ? 'uploaded a new' : 'sent a'} proof of payment for ${d.eventTitle}`,
+    title: 'A payment to verify',
+    intro: [`${d.attendeeName} ${d.again ? 'uploaded a new proof of payment' : 'registered and uploaded a proof of payment'} for “${d.eventTitle}” (${d.businessName}).`, 'Open the event to view the proof and approve or reject it. Their spot is held meanwhile.'],
+    details: [['Attendee', d.attendeeName], ['Email', d.attendeeEmail], ['Event', d.eventTitle]],
+    buttons: [{ label: 'Verify the payment', href: d.eventUrl, primary: true }],
+    footer: productFooter,
+  });
+  return { to: d.to, subject: `Payment to verify: ${d.attendeeName}, ${d.eventTitle}`, text, html, from: cfg.clients.mailFrom };
 }
 
 /** The code that confirms deleting an event (to the person who asked). */
@@ -667,7 +1031,7 @@ export function eventRetentionReminderMail(cfg: AppConfig, d: { to: string; busi
 }
 
 /** The event was deleted: the complete event attached (CSV + JSON). */
-export function eventArchivedMail(cfg: AppConfig, d: { to: string; businessName: string; eventTitle: string; file: string; csv: string; json: string; registrations: number }): Mail {
+export function eventArchivedMail(cfg: AppConfig, d: { to: string; businessName: string; eventTitle: string; file: string; csv: string; json: string; registrations: number; zip: { file: string; body: Buffer; proofs: number } | null; zipTooBig?: boolean }): Mail {
   const { html, text } = render({
     brandName: PRODUCT.name,
     color: PRODUCT.color,
@@ -675,7 +1039,9 @@ export function eventArchivedMail(cfg: AppConfig, d: { to: string; businessName:
     title: `“${d.eventTitle}” was deleted`,
     intro: [
       `As agreed when it was created, ${d.businessName}’s event “${d.eventTitle}” was deleted 3 months after it ended.`,
-      `Attached is the complete event: ${d.registrations} registration${d.registrations === 1 ? '' : 's'} with check-ins and claims (CSV, opens in Excel), and everything in JSON (registrations, claims, scanners and the event’s details).`,
+      `Attached is the complete event: ${d.registrations} registration${d.registrations === 1 ? '' : 's'} with check-ins and claims (CSV, opens in Excel), and everything in JSON: registrations, the attendance analysis (admitted and not), collections, refunds, promo codes, claims, scanners and the event’s details.`,
+      ...(d.zip ? [`The zip has all of it too (with the Excel file), plus the ${d.zip.proofs} proof${d.zip.proofs === 1 ? '' : 's'} of payment, in a folder per attendee.`] : []),
+      ...(d.zipTooBig ? ['The proofs of payment were too big to attach to one email, so only the CSV and JSON are attached.'] : []),
     ],
     note: 'Keep these files: the event can’t be restored.',
     footer: productFooter,
@@ -689,6 +1055,7 @@ export function eventArchivedMail(cfg: AppConfig, d: { to: string; businessName:
     attachments: [
       { filename: `${d.file}.csv`, content: d.csv, contentType: 'text/csv; charset=utf-8' },
       { filename: `${d.file}.json`, content: d.json, contentType: 'application/json; charset=utf-8' },
+      ...(d.zip ? [{ filename: d.zip.file, content: d.zip.body, contentType: 'application/zip' }] : []),
     ],
   };
 }

@@ -15,11 +15,12 @@ const BookingsLanding = lazy(() => import('./pages/BookingsLanding.jsx').then((m
 const ScanPage = lazy(() => import('./bookings/CheckInPage.jsx').then((m) => ({ default: m.ScanPage })));
 const EventScanPage = lazy(() => import('./bookings/EventsPages.jsx').then((m) => ({ default: m.EventScanPage })));
 const ScannerApp = lazy(() => import('./pages/ScannerApp.jsx').then((m) => ({ default: m.ScannerApp })));
+const AffiliatePortal = lazy(() => import('./pages/AffiliatePortal.jsx').then((m) => ({ default: m.AffiliatePortal })));
 const PublicEventPage = lazy(() => import('./pages/PublicEvent.jsx').then((m) => ({ default: m.PublicEventPage })));
 /** /app/events/12/scan -> 12: an event's own full-screen scanner. */
 const eventScan = (path) => (path.startsWith(`${bookingsBase}/events/`) ? Number(/^\/events\/(\d+)\/scan$/.exec(path.slice(bookingsBase.length))?.[1]) || null : null);
 const PortalHome = lazy(() => import('./pages/PortalHome.jsx').then((m) => ({ default: m.PortalHome })));
-const page = (el) => <Suspense fallback={<Loading />}>{el}</Suspense>;
+const page = (el) => <Suspense fallback={<Loading screen />}>{el}</Suspense>;
 
 // One app for every client host (lib/surface.js). The host decides the look; the plan
 // (entitlements, from /api/client/me) decides the features.
@@ -30,12 +31,15 @@ const page = (el) => <Suspense fallback={<Loading />}>{el}</Suspense>;
 //                     /app/scan (portal: /bookings/scan)  the full-screen check-in scanner, no app menu
 //                     /app/events/:id/scan  an event's own scanner    /{slug}/e/{event}  public event page
 //   scanner           /  sign in (scanner code + access code)   /{company}/{event}/{scannerCode}  a scanner's link
+//   affiliates        /  sign in, then the dashboard   /join#t=...  accept a proposal
 //   clientportal      /  app tiles     /bookings/*  the Bookings app inside the portal
 export default function ClientApp() {
   const path = usePathname().replace(/\/+$/, '') || '/';
 
   // The attendance scanner site: its own sign-in (scanner code + access code), no account.
   if (surface === 'scanner') return page(<ScannerApp />);
+  // The affiliate portal: its own sign-in (email + emailed code), no business account.
+  if (surface === 'affiliates') return page(<AffiliatePortal path={path} />);
   if (path === '/sign-in') return <SignInPage />;
   if (path === '/welcome') return <WelcomePage />;
   const invite = /^\/invite\/([^/]+)$/.exec(path);

@@ -4,7 +4,10 @@
 import { newCheckInCode } from '../src/clients/booking/check-in';
 import './env';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { after, before, beforeEach, describe, it } from 'node:test';
+import sharp from 'sharp';
 import request from 'supertest';
 import { outbox } from '../src/auth/mailer';
 import { BookingNotifications, whatsappOutbox } from '../src/clients/booking/notifications';
@@ -42,6 +45,9 @@ function client(host = ACCOUNTS) {
     get: (url: string) => w(agent.get(url)),
     post: (url: string, body?: object) => w(agent.post(url)).send(body ?? {}),
     put: (url: string, body?: object) => w(agent.put(url)).send(body ?? {}),
+    patch: (url: string, body?: object) => w(agent.patch(url)).send(body ?? {}),
+    /** Multipart: chain .field() and .attach(). */
+    multipart: (method: 'post' | 'patch', url: string) => w(agent[method](url)),
   };
 }
 
@@ -191,31 +197,70 @@ describe('admin site: client management', () => {
     assert.equal((await request(t.server).get('/api/public/bookings/smile-clinic').set('Host', BOOKINGS)).body.status, 'open');
   });
 
-  it('deletes (type the name), tells customers, restores, and purges after 30 days', async () => {
-    const { orgId, serviceId } = await newBusiness();
+  it('deletes (type the name, then an emailed code), tells customers, restores, and purges everything after 30 days', async () => {
+    const { b, orgId, serviceId } = await newBusiness();
     assert.equal((await book(serviceId, await slotFrom(serviceId))).status, 201);
+    // An event with registrations, a scanner, a payment QR code and a proof of payment.
+    const ev = await b.post('/api/client/bookings/events', { retentionAgreed: true, title: 'Paid talk', slug: 'paid-talk', kind: 'paid', price: 100, currency: 'PHP', published: true, date: addDays(todayIn('America/Toronto'), 5), startMinute: 600, endMinute: 660, format: 'onsite', address: '1 Main St' });
+    assert.equal(ev.status, 201, JSON.stringify(ev.body));
+    const png = await sharp({ create: { width: 300, height: 300, channels: 3, background: '#000' } }).png().toBuffer();
+    const qr = await b.multipart('post', `/api/client/bookings/events/${ev.body.id}/payment-channels`).field('type', 'qr').field('label', 'GCash').attach('file', png, 'qr.png');
+    assert.equal(qr.status, 201, JSON.stringify(qr.body));
+    assert.equal((await b.patch(`/api/client/bookings/events/${ev.body.id}`, { published: true })).status, 200, 'published once it has a payment channel');
+    const reg = await request(t.server).post('/api/public/bookings/smile-clinic/events/paid-talk/register-paid').set('Host', BOOKINGS).field('firstName', 'Pia').field('lastName', 'P').field('email', 'pia@x.test').field('phone', '+1 416 555 0100').attach('file', png, 'proof.png');
+    assert.equal(reg.status, 201, JSON.stringify(reg.body));
+    assert.equal((await b.post(`/api/client/bookings/events/${ev.body.id}/scanners`, { email: 's@x.test', firstName: 'S', lastName: 'Can' })).status, 201);
+    const files = () => ['event-proofs', 'event-payment-qr'].flatMap((d) => (fs.existsSync(path.join(config.clients.uploadsDir, d)) ? fs.readdirSync(path.join(config.clients.uploadsDir, d)) : []));
+    const mine = files();
+    assert.equal(mine.length, 2);
+
     const a = await admin();
     const csv = await a.get(`/api/admin/clients/${orgId}/export.csv`);
     assert.equal(csv.status, 200);
     assert.ok(csv.text.includes('carl@example.com'));
 
-    const wrong = await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'Smile', reason: 'Closed' });
+    // Step 1: the name, exactly; then a code is emailed to the admin asking.
+    const wrong = await a.post(`/api/admin/clients/${orgId}/delete-code`, { confirmName: 'Smile' });
     assert.equal(wrong.status, 400);
-    const del = await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'smile clinic', reason: 'Clinic closed', notifyCustomers: true });
+    const askCode = async () => {
+      outbox.length = 0;
+      const r = await a.post(`/api/admin/clients/${orgId}/delete-code`, { confirmName: 'smile clinic' });
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.sentTo, JOSUE);
+      const mail = await waitForMail((m) => [m.to].flat().includes(JOSUE) && /Code to delete “Smile Clinic”/.test(m.subject));
+      return /(\d{6})$/.exec(mail.subject)![1];
+    };
+    const code = await askCode();
+    // Step 2: without the right code, nothing is deleted.
+    assert.equal((await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'smile clinic', reason: 'Clinic closed' })).status, 400, 'code required');
+    const bad = await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'smile clinic', code: code === '000000' ? '111111' : '000000', reason: 'Clinic closed' });
+    assert.equal(bad.body.error, 'bad_code');
+    assert.equal((await a.get(`/api/admin/clients/${orgId}`)).body.status, 'active');
+    const del = await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'smile clinic', code, reason: 'Clinic closed', notifyCustomers: true });
     assert.equal(del.status, 200, JSON.stringify(del.body));
     assert.equal(del.body.status, 'deleted');
+    const listed = await a.get('/api/admin/clients');
+    assert.ok(!listed.body.some((c: { id: string }) => c.id === orgId), 'deleted clients never show in the list');
+    const deletedTab = await a.get('/api/admin/clients?status=deleted');
+    assert.deepEqual(deletedTab.body.map((c: { id: string }) => c.id), [orgId], 'they show on the Deleted clients tab');
+    assert.equal((await a.post(`/api/admin/clients/${orgId}/restore`, { reason: 'x' })).status, 200);
+    assert.equal((await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'smile clinic', code, reason: 'Again' })).body.error, 'code_expired', 'a code works once');
     await notifications.flush();
     assert.ok(mailsFor('carl@example.com').some((m) => m.subject.startsWith('Booking cancelled')));
-
-    assert.equal((await a.post(`/api/admin/clients/${orgId}/restore`, { reason: 'Changed their mind' })).status, 200);
     assert.equal((await a.get(`/api/admin/clients/${orgId}`)).body.status, 'active');
 
-    await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'Smile Clinic', reason: 'Closed for good' });
+    await a.post(`/api/admin/clients/${orgId}/delete`, { confirmName: 'Smile Clinic', code: await askCode(), reason: 'Closed for good' });
     const job = t.app.get(RetentionJob);
     assert.equal((await job.run(new Date(Date.now() + 29 * 86_400_000))).purged, 0);
     assert.equal((await job.run(new Date(Date.now() + 31 * 86_400_000))).purged, 1);
     assert.equal(await db.organization.count(), 0);
     assert.equal(await db.booking.count(), 0);
+    // Everything the business had goes: events and all that hangs off them, and the uploaded files.
+    assert.equal(await db.event.count({ where: { organizationId: orgId } }), 0);
+    assert.equal(await db.eventTicket.count({ where: { organizationId: orgId } }), 0);
+    assert.equal(await db.eventScanner.count({ where: { organizationId: orgId } }), 0);
+    assert.equal(await db.eventPaymentChannel.count({ where: { organizationId: orgId } }), 0);
+    assert.equal(files().filter((f) => mine.includes(f)).length, 0, 'proof and QR images deleted');
     assert.equal(await db.user.count({ where: { email: 'owner@clinic.test' } }), 0);
     assert.ok((await db.billingEvent.findMany({ where: { organizationId: orgId } })).some((e) => e.type === 'purged'), 'audit trail kept');
     assert.equal((await a.get(`/api/admin/clients/${orgId}`)).status, 404);

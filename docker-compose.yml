@@ -89,6 +89,7 @@ services:
       BOOKINGS_URL: ${BOOKINGS_URL:-http://bookings.localhost:5173}
       PORTAL_URL: ${PORTAL_URL:-http://clientportal.localhost:5173}
       SCANNER_URL: ${SCANNER_URL:-http://scanner.localhost:5173}
+      AFFILIATES_URL: ${AFFILIATES_URL:-http://affiliates.localhost:5173}
       CLIENT_COOKIE_DOMAIN: ${CLIENT_COOKIE_DOMAIN:-}
       CLIENTS_MAIL_FROM: ${CLIENTS_MAIL_FROM:-Byte Bun Bookings <bookings@bytebuntech.com>}
       WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}

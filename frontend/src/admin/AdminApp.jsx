@@ -1,9 +1,11 @@
 import { usePathname } from '../lib/router.js';
 import { AdminLayout } from './AdminLayout.jsx';
+import { AffiliatesPage } from './AffiliatesPage.jsx';
 import { BookingsPage } from './BookingsPage.jsx';
 import { ClientsPage } from './ClientsPage.jsx';
 import { AdminDialogs } from './dialogs.jsx';
 import { LeadsPage } from './LeadsPage.jsx';
+import { PlanPaymentsPage } from './PlanPaymentsPage.jsx';
 import { ProspectsPage } from './ProspectsPage.jsx';
 import { SecurityPage } from './SecurityPage.jsx';
 import { SignInPage } from './SignInPage.jsx';
@@ -19,6 +21,10 @@ export default function AdminApp() {
   const taskId = pathname.match(/^\/admin\/tasks\/(\d+)$/)?.[1]; // /admin/tasks/12: one task's own page
   const page = pathname.startsWith('/admin/bookings') ? (
     <BookingsPage />
+  ) : pathname.startsWith('/admin/affiliates') ? (
+    <AffiliatesPage />
+  ) : pathname.startsWith('/admin/plan-payments') ? (
+    <PlanPaymentsPage />
   ) : pathname.startsWith('/admin/clients') ? (
     <ClientsPage />
   ) : pathname.startsWith('/admin/prospects') ? (

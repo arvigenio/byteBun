@@ -15,7 +15,7 @@ import { ApiError } from '../common/api-error';
 import type { ClientsAuth } from './clients-auth';
 import { ClientsDb } from './clients-db';
 import { type Entitlements, hasApp, hasFeature, loadEntitlements } from './entitlements';
-import { can, isRole, type Permission, type Role } from './roles';
+import { isRole, permissionsFor, seesAllEvents, type Permission, type Role } from './roles';
 
 export const CLIENTS_AUTH = Symbol('CLIENTS_AUTH');
 
@@ -34,6 +34,12 @@ export interface ClientSessionInfo {
 export interface ClientContext extends ClientSessionInfo {
   org: { id: string; name: string; slug: string };
   role: Role;
+  /** Staff on a custom role (Team page). */
+  customRole: { id: number; name: string } | null;
+  /** What they may do (the built-in role's or the custom role's). */
+  permissions: Permission[];
+  /** Owners and admins: every event. Everyone else: only the events they're assigned to. */
+  allEvents: boolean;
   entitlements: Entitlements;
 }
 
@@ -118,14 +124,26 @@ export class ClientGuard implements CanActivate {
       throw new ApiError(403, { error: 'not_in_plan', message: 'Your plan does not include this feature. Upgrade to use it.' });
     }
     const role: Role = isRole(member.role) ? member.role : 'staff';
-    if (needs.permission && !can(role, needs.permission)) {
+    const customRole = role === 'staff' && member.teamRoleId ? await this.db.teamRole.findUnique({ where: { id: member.teamRoleId } }) : null;
+    const permissions = permissionsFor(role, customRole);
+    if (needs.permission && !permissions.includes(needs.permission)) {
       throw new ApiError(403, { error: 'forbidden', message: 'Your role does not allow this. Ask an owner or admin.' });
+    }
+    // Events: everyone except owners and admins works only on the events they're assigned to.
+    const allEvents = seesAllEvents(role);
+    const eventId = /^\/api\/client\/bookings\/events\/(\d+)(\/|$)/.exec(req.path)?.[1];
+    if (eventId && !allEvents) {
+      const assigned = await this.db.eventMember.findUnique({ where: { eventId_userId: { eventId: Number(eventId), userId: session.user.id } } });
+      if (!assigned) throw new ApiError(404, { error: 'not_found', message: 'That event does not exist, or you aren’t assigned to it.' });
     }
     req.client = {
       ...session,
       activeOrganizationId: member.organizationId,
       org: { id: member.organization.id, name: member.organization.name, slug: member.organization.slug },
       role,
+      customRole: customRole ? { id: customRole.id, name: customRole.name } : null,
+      permissions,
+      allEvents,
       entitlements,
     };
     return true;

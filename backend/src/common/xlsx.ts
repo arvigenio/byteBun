@@ -1,7 +1,6 @@
 // A small .xlsx writer (no library): sheets of text cells, a bold header row, frozen and filtered,
-// with sensible column widths. An .xlsx file is a zip of a few XML files; Node's zlib does the
-// compression and the CRC-32.
-import { crc32, deflateRawSync } from 'node:zlib';
+// with sensible column widths. An .xlsx file is a zip of a few XML files (zip.ts).
+import { zip } from './zip';
 
 export interface Sheet {
   name: string;
@@ -48,52 +47,6 @@ function sheetXml(sheet: Sheet) {
   const freeze = sheet.header ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '';
   const filter = sheet.header && sheet.rows.length > 1 ? `<autoFilter ref="A1:${ref(lastCol, sheet.rows.length - 1)}"/>` : '';
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${freeze}${cols}<sheetData>${rows}</sheetData>${filter}</worksheet>`;
-}
-
-/** A zip of these files (deflated). */
-function zip(files: { name: string; data: Buffer }[]) {
-  const locals: Buffer[] = [];
-  const central: Buffer[] = [];
-  let offset = 0;
-  for (const f of files) {
-    const name = Buffer.from(f.name, 'utf8');
-    const packed = deflateRawSync(f.data);
-    const crc = crc32(f.data) >>> 0;
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0x0800, 6); // UTF-8 names
-    local.writeUInt16LE(8, 8); // deflate
-    local.writeUInt32LE(0, 10); // time/date
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(packed.length, 18);
-    local.writeUInt32LE(f.data.length, 22);
-    local.writeUInt16LE(name.length, 26);
-    local.writeUInt16LE(0, 28);
-    locals.push(local, name, packed);
-    const entry = Buffer.alloc(46);
-    entry.writeUInt32LE(0x02014b50, 0);
-    entry.writeUInt16LE(20, 4);
-    entry.writeUInt16LE(20, 6);
-    entry.writeUInt16LE(0x0800, 8);
-    entry.writeUInt16LE(8, 10);
-    entry.writeUInt32LE(0, 12);
-    entry.writeUInt32LE(crc, 16);
-    entry.writeUInt32LE(packed.length, 20);
-    entry.writeUInt32LE(f.data.length, 24);
-    entry.writeUInt16LE(name.length, 28);
-    entry.writeUInt32LE(offset, 42);
-    central.push(entry, name);
-    offset += local.length + name.length + packed.length;
-  }
-  const dir = Buffer.concat(central);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(dir.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, dir, end]);
 }
 
 export function xlsx(sheets: Sheet[]): Buffer {

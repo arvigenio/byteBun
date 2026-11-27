@@ -1,6 +1,6 @@
 FROM node:22-alpine
 # OpenSSL is required by Prisma's migration engine on Alpine.
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl ghostscript
 WORKDIR /app
 
 # Schema and Prisma config first, because `npm ci` runs `prisma generate` (postinstall).

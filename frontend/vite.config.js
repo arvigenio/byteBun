@@ -59,7 +59,7 @@ function adminPagesPlugin() {
 // clientportal.localhost; *.localhost resolves to this machine in Chrome, Edge and Firefox) get the
 // client app (client.html) for every page, like production (backend/src/web/static-site.ts).
 // Must run before the admin plugin, so /sign-in etc. work there.
-const CLIENT_HOST_LABELS = new Set(['accounts', 'bookings', 'clientportal', 'scanner']);
+const CLIENT_HOST_LABELS = new Set(['accounts', 'bookings', 'clientportal', 'scanner', 'affiliates']);
 function clientHostsPlugin() {
   return {
     name: 'bytebun-client-hosts',

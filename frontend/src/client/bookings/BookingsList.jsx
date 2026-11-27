@@ -7,7 +7,7 @@ import { SlotPicker } from '../components/SlotPicker.jsx';
 import { addDays, fmtDate, fmtLongDate, fmtTime, todayIn } from '../lib/format.js';
 import { bookingSchema } from '../lib/schemas.js';
 import { bookingsBase } from '../lib/surface.js';
-import { Badge, Button, Checkbox, Dialog, Empty, Field, Icon, IconButton, ICONS, Input, LinkButton, Loading, Notice, PageHeader, Select, Spinner, Textarea } from '../ui.jsx';
+import { Badge, Button, Checkbox, Dialog, Empty, Field, Icon, IconButton, ICONS, Input, LinkButton, Loading, Notice, PageHeader, Select, Spinner, Textarea, useConfirm } from '../ui.jsx';
 import { can } from './BookingsApp.jsx';
 import { CheckInPage } from './CheckInPage.jsx';
 
@@ -70,6 +70,11 @@ export function BookingsList() {
             {can(me, 'bookings.settings') && (
               <a href="/api/client/bookings/export.csv" className="inline-flex min-h-10 items-center rounded-btn border border-line-strong bg-surface px-4 text-sm font-semibold hover:bg-sunken">
                 Export CSV
+              </a>
+            )}
+            {(o?.publicUrl || me?.business?.publicUrl) && (
+              <a href={o?.publicUrl || me.business.publicUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 rounded-btn border border-line-strong bg-surface px-4 text-sm font-semibold hover:bg-sunken">
+                View booking page <Icon d={ICONS.external} className="size-4" />
               </a>
             )}
             {can(me, 'bookings.manage') && o?.services > 0 && <Button onClick={() => setAdding(true)}>Add booking</Button>}
@@ -198,7 +203,10 @@ function BookingActions({ b, me, tz, onCancel, onMove }) {
   const past = confirmed && !upcoming;
   const today = b.date === todayIn(tz);
   const attended = !!b.checkedInAt;
+  const confirm = useConfirm();
   const markAttended = async () => {
+    const ok = await confirm({ title: `Check in ${b.customer.name}?`, body: `${b.service?.name ? `${b.service.name}, ` : ''}${fmtTime(b.startsAt, tz)}. The booking is marked as attended.`, action: 'Check in' });
+    if (!ok) return;
     const r = await checkIn({ id: b.id, force: true });
     if (r.error) return toast.error(r.error.message);
     toast.success(`${b.customer.name} checked in`);

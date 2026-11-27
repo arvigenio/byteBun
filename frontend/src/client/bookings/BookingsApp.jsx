@@ -9,12 +9,20 @@ import { PlanPage } from './PlanPage.jsx';
 import { SchedulePage } from './SchedulePage.jsx';
 import { ServicesPage } from './ServicesPage.jsx';
 import { TeamPage } from './TeamPage.jsx';
+import { ChatPage } from './ChatPage.jsx';
+import { useMeQuery } from '../api.js';
 
 // The Bookings app's pages. Same components in the standalone app (/app/*) and the portal
 // (/bookings/*); `sub` is the path after that base.
 export function BookingsApp({ sub }) {
+  const { data: me } = useMeQuery();
   switch (sub) {
     case '/':
+      // A role without bookings lands on its events, or the team chat.
+      if (!can(me, 'bookings.view')) {
+        window.history.replaceState(null, '', `${bookingsBase}${can(me, 'events.view') ? '/events' : '/chat'}`);
+        return can(me, 'events.view') ? <EventsPage /> : <ChatPage />;
+      }
       return <BookingsList />;
     case '/check-in':
       // Check-in is a tab of the Bookings page now.
@@ -34,6 +42,8 @@ export function BookingsApp({ sub }) {
       return <BookingPageSettings />;
     case '/team':
       return <TeamPage />;
+    case '/chat':
+      return <ChatPage />;
     case '/plan':
       return <PlanPage />;
     case '/account':

@@ -5,6 +5,7 @@
      bookings host              Byte Bun Bookings teal
      accounts host              Byte Bun orange (deep enough for white text on buttons)
      clientportal host          Byte Bun purple
+     affiliates host            light blue (the affiliate portal)
      a public booking page      the business's own color (set inline by the page)
    Never hard-code hex in components; use these tokens. */
 @custom-variant mobile (@media (max-width: 720px));
@@ -54,6 +55,14 @@
   --color-brand: #C2410C;
   --color-brand-soft: #FFF1DC;
   --color-accent: #FFA612;
+}
+
+:root[data-surface="affiliates"] {
+  --color-canvas: #F0F9FF;
+  --color-brand: #0277BD;
+  --color-brand-soft: #E1F5FE;
+  --color-accent: #4FC3F7;
+  --color-line: #D6EAF5;
 }
 
 :root[data-surface="portal"] {

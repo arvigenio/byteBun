@@ -61,7 +61,7 @@ export function AccountsHome({ guest = null }) {
     else if (me.data) go(landingUrl(cfg, me.data.business));
   }, [cfg, me.data, isGuest, hasGuestPage]);
   if (isGuest && guest) return guest;
-  return <Loading />;
+  return <Loading screen />;
 }
 
 /** Email -> 6-digit code. New emails get an account on their first sign-in. */
@@ -89,7 +89,7 @@ export function SignInPage() {
     leave(fresh);
   };
 
-  if (!cfg || me.isLoading || signedIn) return <Loading label={signedIn ? 'You’re signed in. Opening your app…' : 'Loading…'} />;
+  if (!cfg || me.isLoading || signedIn) return <Loading screen label={signedIn ? 'You’re signed in. Opening your app…' : undefined} />;
 
   return (
     <AuthCard title={email ? 'Check your email' : BRAND.signIn} subtitle={email ? `We sent a 6-digit code to ${email}.` : `${BRAND.about ? `${BRAND.about} ` : ''}New here? Enter your email and we’ll create your free account.`}>
@@ -187,7 +187,7 @@ export function WelcomePage() {
     if (cfg && me.error?.status === 401) go(signInUrl(cfg));
   }, [cfg, me.error]);
 
-  if (me.isLoading || !cfg) return <Loading />;
+  if (me.isLoading || !cfg) return <Loading screen />;
   const bookingsHost = new URL(cfg.bookingsUrl).host;
 
   const submit = handleSubmit(async (values) => {
@@ -244,9 +244,9 @@ export function InvitePage({ id }) {
   useEffect(() => {
     if (cfg && me.error?.status === 401) go(signInUrl(cfg));
   }, [cfg, me.error]);
-  if (!cfg || me.isLoading || inv.isLoading) return <Loading />;
+  if (!cfg || me.isLoading || inv.isLoading) return <Loading screen />;
   if (inv.error) return <Centered title="Invitation">{inv.error.message}</Centered>;
-  if (!inv.data) return <Loading />;
+  if (!inv.data) return <Loading screen />;
   return (
     <AuthCard title={`Join ${inv.data.businessName}`} subtitle={`${inv.data.inviter} invited you as ${inv.data.role}.`}>
       <Button

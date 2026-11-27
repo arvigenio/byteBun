@@ -1,6 +1,6 @@
 // Attendance scanners and the live attendance feed.
 //
-// Only free-to-attend events have scanners: 2 per event (limit:events.scanners, every plan). A
+// Onsite events (free or paid) have scanners: 2 per event (limit:events.scanners, every plan). A
 // scanner is a person: first and last name and a role ("Attendance" by default). It has two
 // 8-character codes, both unique across the system:
 //   scanner code  its ID: in its link {SCANNER_URL}/{business}/{event}/{scannerCode}, or typed on
@@ -51,14 +51,12 @@ import { logger } from '../../logging/logger';
 import { scannerAccessMail } from '../client-emails';
 import { ClientsDb } from '../clients-db';
 import { ClientRoute, orgStatus, type ClientContext } from '../client-context';
-import { can } from '../roles';
 import { hasFeature, limitOf, loadEntitlements } from '../entitlements';
 import { formatCheckInCode, newCheckInCode, parseCheckInCode } from './check-in';
-import { EventCheckIns, EventLive, zoneOf } from './events';
+import { EventCheckIns, EventLive, logTicket, zoneOf } from './events';
 import { formatInZone, toLocal } from './time';
+import { EVENT_ROUTES } from '../roles';
 
-const MANAGE = { app: 'bookings', permission: 'bookings.manage' } as const;
-const SETTINGS = { app: 'bookings', permission: 'bookings.settings' } as const;
 const ctx = (req: Request) => req.client as ClientContext;
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 const DEFAULT_ROLE = 'Attendance';
@@ -137,12 +135,13 @@ export class EventClaims {
     const t = await this.db.eventTicket.findFirst({ where: { organizationId: orgId, ...(body.ticketId ? { id: body.ticketId } : { code: code! }) }, include: { event: true } });
     if (!t) throw new ApiError(404, { error: 'not_found', message: 'No registration matches this code.' });
     if (t.eventId !== eventId) throw new ApiError(409, { error: 'not_this_event', message: `This code is for another event: “${t.event.title}”.` });
-    const ticket = { id: t.id, name: t.name, email: t.email, code: formatCheckInCode(t.code), checkedInAt: t.checkedInAt, status: t.status };
+    const ticket = { id: t.id, name: t.name, email: t.email, code: t.code ? formatCheckInCode(t.code) : null, checkedInAt: t.checkedInAt, status: t.status };
     if (t.status !== 'confirmed') return { kind: 'claim', state: t.status === 'cancelled' ? 'cancelled' : 'revoked', item: k.name, ticket };
     // Attendance first: only checked-in attendees can claim.
     if (!t.checkedInAt) return { kind: 'claim', state: 'not_checked_in', item: k.name, ticket };
     try {
       const claim = await this.db.eventClaim.create({ data: { claimableId: k.id, ticketId: t.id, organizationId: orgId, scannerId: who.scannerId, claimedBy: who.by } });
+      await logTicket(this.db, t, 'claimed', who.by, k.name);
       this.live.emit({ eventId, type: 'claimed', name: t.name, item: k.name, by: who.by });
       logger.info({ eventId, claimableId: k.id, ticketId: t.id }, 'Event item claimed');
       return { kind: 'claim', state: 'claimed', item: k.name, claimedAt: claim.claimedAt, ticket };
@@ -153,8 +152,10 @@ export class EventClaims {
     }
   }
 
-  async undo(eventId: number, k: ClaimableRow, ticketId: number) {
-    await this.db.eventClaim.deleteMany({ where: { claimableId: k.id, ticketId } });
+  async undo(eventId: number, k: ClaimableRow, ticketId: number, by: string | null = null) {
+    const { count } = await this.db.eventClaim.deleteMany({ where: { claimableId: k.id, ticketId } });
+    const t = count ? await this.db.eventTicket.findUnique({ where: { id: ticketId }, select: { id: true, organizationId: true } }) : null;
+    if (t) await logTicket(this.db, t, 'claim_undone', by, k.name);
     this.live.emit({ eventId, type: 'claim_undone', item: k.name });
     return { ok: true };
   }
@@ -245,7 +246,7 @@ export class EventScannersController {
   }
 
   @Get('scanners')
-  @ClientRoute(MANAGE)
+  @ClientRoute(EVENT_ROUTES.view)
   async list(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
     const c = ctx(req);
     const e = await this.event(c.org.id, id);
@@ -255,9 +256,9 @@ export class EventScannersController {
       this.db.eventClaim.groupBy({ by: ['claimableId'], where: { claimable: { eventId: id } }, _count: { _all: true } }),
       this.limits(c.org.id),
     ]);
-    const scanners = await Promise.all(rows.map((s) => this.row(s, e.slug, c.org.id, claimables, can(c.role, 'bookings.settings'))));
+    const scanners = await Promise.all(rows.map((s) => this.row(s, e.slug, c.org.id, claimables, c.permissions.includes('events.scanners'))));
     return {
-      allowed: e.kind === 'free' && e.format !== 'online',
+      allowed: e.format !== 'online',
       claimableLimit: limits.claimables,
       sections: [
         { id: null, kind: 'attendance', name: 'Attendance', limit: limits.attendance, scanners: scanners.filter((s) => s.claimableId === null) },
@@ -274,11 +275,10 @@ export class EventScannersController {
   }
 
   @Post('claimables')
-  @ClientRoute(SETTINGS)
+  @ClientRoute(EVENT_ROUTES.scanners)
   async addClaimable(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Body(new YupValidationPipe(claimableSchema)) body: yup.InferType<typeof claimableSchema>) {
     const c = ctx(req);
     const e = await this.event(c.org.id, id);
-    if (e.kind !== 'free') throw new ApiError(409, { error: 'paid_event', message: 'Claimables are for free events.' });
     if (e.format === 'online') throw new ApiError(409, { error: 'online_event', message: 'Online events have no scanning: attendees just join with the link.' });
     const { claimables } = await this.limits(c.org.id);
     const count = await this.db.eventClaimable.count({ where: { eventId: id } });
@@ -291,7 +291,7 @@ export class EventScannersController {
   }
 
   @Patch('claimables/:cid')
-  @ClientRoute(SETTINGS)
+  @ClientRoute(EVENT_ROUTES.scanners)
   async renameClaimable(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Param('cid', ParseIntPipe) cid: number, @Body(new YupValidationPipe(claimableSchema)) body: yup.InferType<typeof claimableSchema>) {
     await this.event(ctx(req).org.id, id);
     await this.claimable(id, cid);
@@ -304,7 +304,7 @@ export class EventScannersController {
   /** The business's own scanner page, scanning for a claimable. */
   @Post('claimables/:cid/claim')
   @HttpCode(200)
-  @ClientRoute(MANAGE)
+  @ClientRoute(EVENT_ROUTES.attendees)
   async claimHere(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Param('cid', ParseIntPipe) cid: number, @Body(new YupValidationPipe(scanSchema)) body: yup.InferType<typeof scanSchema>) {
     const c = ctx(req);
     await this.event(c.org.id, id);
@@ -314,14 +314,14 @@ export class EventScannersController {
 
   @Post('claimables/:cid/undo')
   @HttpCode(200)
-  @ClientRoute(MANAGE)
+  @ClientRoute(EVENT_ROUTES.attendees)
   async unclaimHere(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Param('cid', ParseIntPipe) cid: number, @Body(new YupValidationPipe(undoSchema)) body: yup.InferType<typeof undoSchema>) {
     await this.event(ctx(req).org.id, id);
-    return this.claims.undo(id, await this.claimable(id, cid), body.ticketId);
+    return this.claims.undo(id, await this.claimable(id, cid), body.ticketId, ctx(req).user.name || ctx(req).user.email);
   }
 
   @Delete('claimables/:cid')
-  @ClientRoute(SETTINGS)
+  @ClientRoute(EVENT_ROUTES.scanners)
   async deleteClaimable(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Param('cid', ParseIntPipe) cid: number) {
     await this.event(ctx(req).org.id, id);
     await this.claimable(id, cid);
@@ -332,11 +332,10 @@ export class EventScannersController {
   }
 
   @Post('scanners')
-  @ClientRoute(SETTINGS)
+  @ClientRoute(EVENT_ROUTES.scanners)
   async create(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Body(new YupValidationPipe(personSchema)) body: yup.InferType<typeof personSchema>) {
     const c = ctx(req);
     const e = await this.event(c.org.id, id);
-    if (e.kind !== 'free') throw new ApiError(409, { error: 'paid_event', message: 'Event scanners are for free events.' });
     if (e.format === 'online') throw new ApiError(409, { error: 'online_event', message: 'Online events have no scanning: attendees just join with the link.' });
     const k = body.claimableId ? await this.claimable(id, body.claimableId) : null;
     const limits = await this.limits(c.org.id);
@@ -356,7 +355,7 @@ export class EventScannersController {
   /** A new access code: the old one stops working and the device using it is signed out. */
   @Post('scanners/:sid/code')
   @HttpCode(200)
-  @ClientRoute(SETTINGS)
+  @ClientRoute(EVENT_ROUTES.scanners)
   async newCode(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Param('sid', ParseIntPipe) sid: number) {
     const c = ctx(req);
     const e = await this.event(c.org.id, id);
@@ -370,7 +369,7 @@ export class EventScannersController {
 
   @Post('scanners/:sid/revoke')
   @HttpCode(200)
-  @ClientRoute(SETTINGS)
+  @ClientRoute(EVENT_ROUTES.scanners)
   async revoke(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Param('sid', ParseIntPipe) sid: number) {
     const c = ctx(req);
     const e = await this.event(c.org.id, id);
@@ -381,7 +380,7 @@ export class EventScannersController {
   }
 
   @Delete('scanners/:sid')
-  @ClientRoute(SETTINGS)
+  @ClientRoute(EVENT_ROUTES.scanners)
   async remove(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Param('sid', ParseIntPipe) sid: number) {
     await this.event(ctx(req).org.id, id);
     await this.scanner(id, sid);
@@ -394,7 +393,7 @@ export class EventScannersController {
   @Sse('live')
   @Header('X-Accel-Buffering', 'no')
   @Header('Cache-Control', 'no-cache')
-  @ClientRoute(MANAGE)
+  @ClientRoute(EVENT_ROUTES.view)
   async feed(@Req() req: Request, @Param('id', ParseIntPipe) id: number): Promise<Observable<MessageEvent>> {
     await this.event(ctx(req).org.id, id);
     return merge(
@@ -508,8 +507,8 @@ export class ScannerController {
   @HttpCode(200)
   async undo(@Req() req: Request, @Param('scannerCode') scannerCode: string, @Body(new YupValidationPipe(undoSchema)) body: yup.InferType<typeof undoSchema>) {
     const s = await this.session(req, scannerCode);
-    if (s.claimable) return this.claims.undo(s.eventId, s.claimable, body.ticketId);
-    return this.checkIns.undo(s.organizationId, s.eventId, body.ticketId);
+    if (s.claimable) return this.claims.undo(s.eventId, s.claimable, body.ticketId, `${fullName(s)} (${s.claimable.name})`);
+    return this.checkIns.undo(s.organizationId, s.eventId, body.ticketId, `${fullName(s)} (${s.role})`);
   }
 
 }

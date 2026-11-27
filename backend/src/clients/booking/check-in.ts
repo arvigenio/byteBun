@@ -24,7 +24,8 @@ export function parseCheckInCode(input: unknown): string | null {
 }
 
 /** "ABCD-EFGH": easier to read out. */
-export const formatCheckInCode = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
+/** ABCD-1234; '' for a registration with no code yet (a payment not confirmed). */
+export const formatCheckInCode = (code: string | null) => (code ? `${code.slice(0, 4)}-${code.slice(4)}` : '');
 
 export const checkInUrl = (bookingsUrl: string, code: string) => `${bookingsUrl}/app/scan?code=${code}`;
 

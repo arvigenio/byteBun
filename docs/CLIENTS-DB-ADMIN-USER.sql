@@ -26,3 +26,14 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA billing TO bytebun_admin;
 GRANT SELECT, DELETE ON ALL TABLES IN SCHEMA booking TO bytebun_admin;
 GRANT INSERT, UPDATE ON booking.notifications TO bytebun_admin;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA booking TO bytebun_admin;
+
+-- Affiliates and plan payments (migrations 0042-0043; run these too on an existing setup):
+-- Byte Bun's affiliates, their commissions, plan payments to verify, Byte Bun's payment channels.
+GRANT SELECT, INSERT, UPDATE, DELETE ON billing.affiliates, billing.plan_affiliates, billing.affiliate_commissions, billing.plan_payments, billing.payment_channels TO bytebun_admin;
+GRANT SELECT ON billing.affiliate_sessions TO bytebun_admin;
+GRANT SELECT, DELETE ON booking.event_affiliates, booking.event_affiliate_payouts TO bytebun_admin;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA billing TO bytebun_admin;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA booking TO bytebun_admin;
+
+-- Team roles, event assignments and the team chat (migration 0044): the purge removes them.
+GRANT SELECT, DELETE ON booking.team_roles, booking.event_members, booking.chat_rooms, booking.chat_messages, booking.chat_reads TO bytebun_admin;

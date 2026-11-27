@@ -29,6 +29,7 @@ export function ClientsPage() {
       <div className="mb-5 flex gap-2" role="tablist">
         {[
           ['clients', 'All clients'],
+          ['deleted', 'Deleted clients'],
           ['audit', 'Audit log'],
         ].map(([k, label]) => (
           <AdminButton key={k} variant={tab === k ? 'primary' : 'outline'} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
@@ -36,25 +37,28 @@ export function ClientsPage() {
           </AdminButton>
         ))}
       </div>
-      {tab === 'clients' ? <ClientList onOpen={setSelected} /> : <AuditLog />}
+      {tab === 'clients' ? <ClientList key="all" onOpen={setSelected} /> : tab === 'deleted' ? <ClientList key="deleted" deleted onOpen={setSelected} /> : <AuditLog />}
     </>
   );
 }
 
-function ClientList({ onOpen }) {
-  const [filter, setFilter] = useState({ q: '', status: '', plan: '' });
+/** The clients list; `deleted`: only deleted clients (in their 30-day grace period, restorable). */
+function ClientList({ onOpen, deleted = false }) {
+  const [filter, setFilter] = useState({ q: '', status: deleted ? 'deleted' : '', plan: '' });
   const catalog = useCatalogQuery();
   const q = useClientsQuery(filter);
   return (
     <Panel>
-      <div className="mb-4 grid gap-3 desktop:grid-cols-[1fr_180px_200px]">
+      {deleted && <Notice tone="info">Deleted clients are blocked and removed permanently 30 days after deletion. Open one to restore it before then.</Notice>}
+      <div className={`mb-4 grid gap-3 ${deleted ? 'desktop:grid-cols-[1fr_200px]' : 'desktop:grid-cols-[1fr_180px_200px]'}`}>
         <TextInput placeholder="Search name, link or owner email" value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} aria-label="Search" />
-        <SelectInput value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} aria-label="Status">
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="deactivated">Deactivated</option>
-          <option value="deleted">Deleted</option>
-        </SelectInput>
+        {!deleted && (
+          <SelectInput value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} aria-label="Status">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="deactivated">Deactivated</option>
+          </SelectInput>
+        )}
         <SelectInput value={filter.plan} onChange={(e) => setFilter({ ...filter, plan: e.target.value })} aria-label="Plan">
           <option value="">All plans</option>
           {catalog.data?.plans.map((p) => (
@@ -69,7 +73,7 @@ function ClientList({ onOpen }) {
       ) : q.error ? (
         <Notice tone="danger">{q.error.message}</Notice>
       ) : !q.data.length ? (
-        <p className="text-muted">No clients match.</p>
+        <p className="text-muted">{deleted ? 'No deleted clients.' : 'No clients match.'}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
@@ -272,7 +276,11 @@ const TITLES = { plan: 'Change plan', deactivate: 'Deactivate client', reactivat
 
 function ActionDialog({ kind, client, catalog, onClose }) {
   const [run, state] = useClientActionMutation();
+  const [askCode, askState] = useClientActionMutation();
+  // Deleting: the name typed, then a 6-digit code emailed to this admin.
+  const [codeSent, setCodeSent] = useState(null); // { sentTo, minutes }
   const [form, setForm] = useState({
+    code: '',
     planCode: client.subscription?.planCode ?? 'free',
     addons: client.subscription?.addons.map((a) => a.code) ?? [],
     reason: '',
@@ -283,13 +291,20 @@ function ActionDialog({ kind, client, catalog, onClose }) {
   const [errors, setErrors] = useState({});
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const reasonRequired = kind === 'deactivate' || kind === 'delete';
+  const sendCode = async () => {
+    setErrors({});
+    const r = await askCode({ id: client.id, action: 'delete-code', confirmName: form.confirmName });
+    if (r.error) return setErrors({ ...r.error.fields, form: r.error.message });
+    setCodeSent(r.data);
+    set('code', '');
+  };
 
   const submit = async () => {
     const body = {
       plan: { planCode: form.planCode, addons: form.addons, reason: form.reason || null },
       deactivate: { reason: form.reason, notifyOwner: form.notifyOwner },
       reactivate: { reason: form.reason || null, notifyOwner: form.notifyOwner },
-      delete: { confirmName: form.confirmName, reason: form.reason, notifyCustomers: form.notifyCustomers, notifyOwner: form.notifyOwner },
+      delete: { confirmName: form.confirmName, code: form.code, reason: form.reason, notifyCustomers: form.notifyCustomers, notifyOwner: form.notifyOwner },
       restore: { reason: form.reason || null },
     }[kind];
     const r = await run({ id: client.id, action: kind, ...body });
@@ -306,9 +321,15 @@ function ActionDialog({ kind, client, catalog, onClose }) {
       onClose={onClose}
       footer={
         <>
-          <AdminButton variant={kind === 'delete' ? 'dangerSolid' : 'primary'} busy={state.isLoading} onClick={submit} disabled={reasonRequired && form.reason.trim().length < 3}>
-            {TITLES[kind]}
-          </AdminButton>
+          {kind === 'delete' && !codeSent ? (
+            <AdminButton variant="dangerSolid" busy={askState.isLoading} onClick={sendCode} disabled={form.reason.trim().length < 3 || !form.confirmName.trim()}>
+              Email me a code
+            </AdminButton>
+          ) : (
+            <AdminButton variant={kind === 'delete' ? 'dangerSolid' : 'primary'} busy={state.isLoading} onClick={submit} disabled={(reasonRequired && form.reason.trim().length < 3) || (kind === 'delete' && form.code.length !== 6)}>
+              {TITLES[kind]}
+            </AdminButton>
+          )}
           <AdminButton variant="outline" onClick={onClose}>
             Cancel
           </AdminButton>
@@ -348,15 +369,42 @@ function ActionDialog({ kind, client, catalog, onClose }) {
         {kind === 'delete' && (
           <>
             <Notice tone="danger">
-              The client is blocked right away and everything is permanently removed after 30 days (until then it can be restored). The subscription is cancelled.{' '}
+              The client is blocked right away and everything is permanently removed after 30 days (until then it can be restored): bookings, customers, services, events with their registrations, scanners and vouchers, and uploaded files (proofs of payment, QR codes). The subscription is cancelled.{' '}
               <a className="underline" href={clientExportUrl(client.id)}>
                 Export their bookings (CSV)
               </a>{' '}
               first if needed.
             </Notice>
             <Field label={`Type “${client.name}” to confirm`} id="confirmName" error={errors.confirmName}>
-              <TextInput id="confirmName" value={form.confirmName} onChange={(e) => set('confirmName', e.target.value)} autoComplete="off" />
+              <TextInput
+                id="confirmName"
+                value={form.confirmName}
+                disabled={!!codeSent}
+                onChange={(e) => set('confirmName', e.target.value)}
+                autoComplete="off"
+              />
             </Field>
+            {codeSent && (
+              <Field label={`Code sent to ${codeSent.sentTo}`} id="deleteCode" error={errors.code}>
+                <TextInput
+                  id="deleteCode"
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={form.code}
+                  onChange={(e) => set('code', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="max-w-48 text-center font-mono text-xl tracking-[0.4em]"
+                />
+                <p className="mt-1 text-[12px] text-muted">
+                  It expires in {codeSent.minutes} minutes.{' '}
+                  <button type="button" className="cursor-pointer underline" onClick={sendCode} disabled={askState.isLoading}>
+                    Send a new code
+                  </button>
+                </p>
+              </Field>
+            )}
             <label className="mb-3 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.notifyCustomers} onChange={(e) => set('notifyCustomers', e.target.checked)} />
               Cancel upcoming bookings and email those customers

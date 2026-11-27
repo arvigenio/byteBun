@@ -9,7 +9,8 @@
 //   POST /api/admin/clients/:id/plan        { planCode, addons, reason }
 //   POST /api/admin/clients/:id/deactivate  { reason, notifyOwner }
 //   POST /api/admin/clients/:id/reactivate  { reason, notifyOwner }
-//   POST /api/admin/clients/:id/delete      { confirmName, reason, notifyCustomers, notifyOwner }  owner-level admins
+//   POST /api/admin/clients/:id/delete-code { confirmName }  owner-level admins: emails them a 6-digit code
+//   POST /api/admin/clients/:id/delete      { confirmName, code, reason, notifyCustomers, notifyOwner }
 //   POST /api/admin/clients/:id/restore     { reason }
 //   GET  /api/admin/clients/:id/hosted-events                 the client's events (seminars, webinars)
 //   POST /api/admin/clients/:id/hosted-events/:eventId/limit  { participantLimit, reason }  a bigger event was paid for
@@ -18,6 +19,7 @@
 import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseIntPipe, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as yup from 'yup';
+import { StrictRateLimit } from '../../common/rate-limit';
 import { YupValidationPipe } from '../../common/yup-validation.pipe';
 import { csvFor } from '../booking/csv';
 import { type ClientsDb } from '../clients-db';
@@ -34,7 +36,15 @@ const optionalReason = () =>
 const planSchema = yup.object({ planCode: yup.string().trim().max(40).required('Choose a plan.'), addons: yup.array(yup.string().trim().max(40).required()).max(20).default([]), reason: optionalReason() });
 const deactivateSchema = yup.object({ reason: requiredReason(), notifyOwner: yup.boolean().default(true) });
 const reactivateSchema = yup.object({ reason: optionalReason(), notifyOwner: yup.boolean().default(true) });
-const deleteSchema = yup.object({ confirmName: yup.string().trim().max(200).required('Type the business name.'), reason: requiredReason(), notifyCustomers: yup.boolean().default(false), notifyOwner: yup.boolean().default(true) });
+const confirmName = () => yup.string().trim().max(200).required('Type the business name.');
+const deleteCodeSchema = yup.object({ confirmName: confirmName() });
+const deleteSchema = yup.object({
+  confirmName: confirmName(),
+  code: yup.string().trim().matches(/^\d{6}$/, 'Enter the 6-digit code from the email.').required('Enter the 6-digit code from the email.'),
+  reason: requiredReason(),
+  notifyCustomers: yup.boolean().default(false),
+  notifyOwner: yup.boolean().default(true),
+});
 const restoreSchema = yup.object({ reason: optionalReason() });
 const voucherSchema = yup.object({
   participants: yup.number().integer().min(51, 'More than 50.').max(1000000).required('How many participants?'),
@@ -95,6 +105,13 @@ export class ClientsAdminController {
   @HttpCode(200)
   reactivate(@Req() req: Request, @Param('id') id: string, @Body(new YupValidationPipe(reactivateSchema)) body: yup.InferType<typeof reactivateSchema>) {
     return this.clients.reactivate(id, { reason: body.reason ?? null, notifyOwner: body.notifyOwner }, actor(req));
+  }
+
+  @Post(':id/delete-code')
+  @HttpCode(200)
+  @StrictRateLimit()
+  deleteCode(@Req() req: Request, @Param('id') id: string, @Body(new YupValidationPipe(deleteCodeSchema)) body: yup.InferType<typeof deleteCodeSchema>) {
+    return this.clients.requestDeleteCode(id, body, actor(req));
   }
 
   @Post(':id/delete')

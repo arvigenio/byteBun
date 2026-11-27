@@ -1,6 +1,7 @@
 // Imported first by every test file: configuration for the test run, set before src/config loads.
 // Tests use their own database (bytebun_test by default) on the same PostgreSQL server; it is
 // created and migrated automatically. Emails go to the in-memory outbox (src/auth/mailer.ts).
+import os from 'node:os';
 import path from 'node:path';
 
 process.env.NODE_ENV = 'test';
@@ -42,3 +43,6 @@ process.env.STATIC_DIR = path.resolve(__dirname, '../../test/fixtures/static');
 process.env.PROSPECTS_FIXTURE_FILE = path.resolve(__dirname, '../../test/fixtures/prospects.json');
 process.env.PROSPECTS_WEBSITE_CHECKS = 'false';
 process.env.GOOGLE_PLACES_API_KEY = '';
+
+// Uploaded files (proofs of payment, payment QR codes): a scratch folder per run.
+process.env.UPLOADS_DIR = path.join(os.tmpdir(), `bytebun-test-uploads-${process.pid}`);

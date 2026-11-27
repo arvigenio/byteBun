@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 import { navigate } from '../../lib/router.js';
+import { getMe } from '../../api/admin.js';
 import { fetchLead, refreshAfterEvent } from '../../store/adminDataSlices.js';
 import { prospectUpdated } from '../../store/adminProspectsSlice.js';
 import { refreshSavedProspects } from '../../store/adminSavedProspectsSlice.js';
@@ -45,7 +46,10 @@ export function useAdminRealtime(me) {
     socket.on('disconnect', () => setStatus('offline'));
     socket.io.on('reconnect_attempt', () => setStatus('connecting'));
     // The server closes the connection when the session ends (expired, or signed out elsewhere).
-    socket.on('unauthorized', () => window.location.replace('/'));
+    // Double-checked with the API first, so a socket problem never signs anyone out by itself.
+    socket.on('unauthorized', () => {
+      getMe().catch((err) => err.status === 401 && window.location.replace('/'));
+    });
 
     socket.on('lead.created', (e) => {
       toast.success(`New lead: ${nameOf(e.lead)}`, {

@@ -1,4 +1,5 @@
 import { createContext, forwardRef, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { BouncingBun } from '../components/BouncingBun.jsx';
 import { onRouteLinkClick } from '../lib/router.js';
 
 // The client apps' UI kit. Tokens only (client.css); the brand color follows the host / business.
@@ -64,10 +65,21 @@ export function Spinner({ className = 'size-5' }) {
   return <span className={cx('inline-block animate-spin rounded-full border-2 border-current border-r-transparent', className)} aria-hidden="true" />;
 }
 
-export function Loading({ label = 'Loading…' }) {
+/** Waiting for a page or a section: the bouncing bun (a fun rotating message unless `label` is given). */
+export function Loading({ label, screen = false }) {
+  // label="": a small bun with no words (inside small boxes, e.g. while a QR code draws).
+  if (label === '') return <BouncingBun label="" size={34} className="py-1 text-muted" />;
+  // screen: a whole page is loading: the bun sits in the exact middle of the screen.
+  if (screen)
+    return (
+      <div className="fixed inset-0 z-40 grid place-items-center">
+        <BouncingBun label={label} className="py-0 text-muted" />
+      </div>
+    );
+  // Otherwise: centered in the space it's waiting to fill.
   return (
-    <div className="flex items-center justify-center gap-3 py-16 text-muted" role="status">
-      <Spinner /> {label}
+    <div className="grid min-h-[45vh] w-full place-items-center">
+      <BouncingBun label={label} className="py-0 text-muted" />
     </div>
   );
 }
@@ -248,6 +260,7 @@ export function Icon({ d, className = 'size-5' }) {
 }
 
 export const ICONS = {
+  chat: 'M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12zM8 11h8M8 14.5h5',
   calendar: 'M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z',
   list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   clock: 'M12 7v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -273,6 +286,8 @@ export const ICONS = {
   undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11',
   move: 'M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v4M5 5a1 1 0 00-1 1v13a1 1 0 001 1h6M15 19h6M18 16l3 3-3 3',
   qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM16 16h2v2h-2z',
+  // A banknote with a curved arrow back: money returned.
+  refund: 'M3 8h18v9H3zM12 15a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM7 4L4.5 6.5 7 9M4.5 6.5H13',
   chevronLeft: 'M15 6l-6 6 6 6',
   chevronRight: 'M9 6l6 6-6 6',
 };
